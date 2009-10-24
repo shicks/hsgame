@@ -1,7 +1,7 @@
 module YAML ( Node(..), YAML(..),
               -- buildTree, unEscape, tokenize, tokenizeBytes,
               getScalar, getMapping, getSequence,
-              getMappingValues, getMappingList,
+              getMappingValues, getMappingList, makeTree, makeTokens,
               showYaml, readYaml, parseYaml, parseYamlList ) where
 
 import YAML.Reference ( Code(..), tokenize ) -- , tokenizeBytes )
@@ -245,6 +245,9 @@ getMeta [] = ""
 
 parseYaml :: String -> [Node]
 parseYaml = parseStream . buildTree . tokenize "-"
+
+makeTokens = tokenize "-"
+makeTree = buildTree . tokenize "-"
 
 parseYamlList :: String -> [Node]
 parseYamlList x = case parseYaml x of
