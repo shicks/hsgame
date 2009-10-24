@@ -26,7 +26,7 @@ handle2chans h =
     do i <- newChan
        o <- newChan
        forkIO $ forever $ do x <- hGetLine h
-                             case readLine x of
+                             case readLine $ init x of
                                Just a -> writeChan i a
                                Nothing -> fail ("bad data: "++x)
        forkIO $ forever $ do x <- readChan o
@@ -57,10 +57,13 @@ main = do c <- newChan
                                          forever $ do l <- hGetLine h
                                                       writeChan c' (n,l)
           -}
-          startServer 12345 $ \n h ->
+          startServer 12345 $ \hostname h ->
               do (i,o) <- handle2chans h
                  c' <- dupChan c
-                 writeChan c' ("server", "Everyone, welcome "++n)
+                 writeChan o "What is your name? "
+                 n <- readChan i
+                 writeChan c' ("server", "Everyone, welcome "++n++
+                               " from "++hostname)
                  forkIO $ forever $ readChan c' >>= heSaysC o n
                  forever $ do l <- readChan i
                               writeChan c' (n,l)
