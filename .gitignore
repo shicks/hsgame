@@ -6,6 +6,7 @@ config.d
 *.depend
 *.log
 .package.conf
+.package.conf.old
 .yaml-simple
 dist
 *.cfg

@@ -17,7 +17,7 @@
 -------------------------------------------------------------------------------
 
 {-# LANGUAGE CPP, MultiParamTypeClasses, FunctionalDependencies,
-             FlexibleInstances, TypeSynonymInstances, PostfixOperators #-}
+             FlexibleInstances, TypeSynonymInstances #-}
 
 module YAML.Reference ( Code(..), tokenize, tokenizeBytes ) where
 
