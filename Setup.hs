@@ -8,3 +8,4 @@ main = build [] $ do autoVersion Numbered
                      ghcFlags ["-threaded", "-Wall",
                                "-funbox-strict-fields","-O2"]
                      package "yaml-simple" ["YAML"] []
+                     executable "yell" "yell.hs" []

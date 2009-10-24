@@ -11,3 +11,4 @@ config.d
 dist
 *.cfg
 *.config
+yell
