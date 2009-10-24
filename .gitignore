@@ -12,3 +12,4 @@ dist
 *.cfg
 *.config
 yell
+echo
