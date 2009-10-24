@@ -1,0 +1,12 @@
+old
+*~
+*.[oa]
+*.hi
+config.d
+*.depend
+*.log
+.package.conf
+.yaml-simple
+dist
+*.cfg
+*.config
