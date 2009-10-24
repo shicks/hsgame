@@ -1,8 +1,8 @@
 module YAML ( Node(..), YAML(..),
               -- buildTree, unEscape, tokenize, tokenizeBytes,
               getScalar, getMapping, getSequence,
-              getMappingValues, getMappingList,
-              showYaml, readYaml, parseYaml ) where
+              getMappingValues, getMappingList, makeTree, makeTokens,
+              showYaml, readYaml, parseYaml, parseYamlList ) where
 
 import YAML.Reference ( Code(..), tokenize ) -- , tokenizeBytes )
 import Data.Maybe ( catMaybes )
@@ -245,6 +245,14 @@ getMeta [] = ""
 
 parseYaml :: String -> [Node]
 parseYaml = parseStream . buildTree . tokenize "-"
+
+makeTokens = tokenize "-"
+makeTree = buildTree . tokenize "-"
+
+parseYamlList :: String -> [Node]
+parseYamlList x = case parseYaml x of
+                    [List ns] -> ns
+                    _ -> error "bad input in parseYamlList"
 
 readYaml :: YAML a => String -> Maybe a
 readYaml s = case parseYaml s of

@@ -362,10 +362,11 @@ data Code = Bom             -- ^ BOM, contains \"@TF8@\", \"@TF16LE@\", \"@TF32B
           | Error           -- ^ Parsing error at this point.
           | Unparsed        -- ^ Unparsed due to errors (or at end of test).
           | Detected        -- ^ Detected parameter (for testing).
-  deriving Eq
+  deriving ( Eq, Show )
 
 -- | @show code@ converts a 'Code' to the one-character YEAST token code char.
 -- The list of byte codes is also documented in the @yaml2yeast@ program.
+{-
 instance Show Code where
   show code = case code of
                    Bom             -> "U"
@@ -410,7 +411,7 @@ instance Show Code where
                    Error           -> "!"
                    Unparsed        -> "-"
                    Detected        -> "$"
-
+-}
 -- | Parsed token.
 data Token = Token {
     tByteOffset :: Int,   -- ^ 0-base byte offset in stream.
