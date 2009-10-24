@@ -8,7 +8,8 @@ import Control.Concurrent.Chan ( newChan, writeChan, readChan, dupChan )
 main = do c <- newChan
           forkIO $ forever $ getLine >>= writeChan c
           startServer 12345 $ \n h -> do c' <- dupChan c
-                                         forkIO $ readChan c >>= hPutStrLn h
+                                         forkIO $ forever $ readChan c'
+                                                            >>= hPutStrLn h
                                          forever $ do l <- hGetLine h
                                                       hPutStrLn h l
                                                       putStrLn $ n ++ ": " ++ l
