@@ -10,3 +10,4 @@ main = build [] $ do autoVersion Numbered
                      package "yaml-simple" ["YAML"] []
                      executable "yell" "yell.hs" []
                      executable "echo" "echo.hs" []
+                     executable "telnet" "telnet.hs" []
