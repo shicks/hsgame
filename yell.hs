@@ -1,5 +1,8 @@
 import TCP.Server ( startServer )
-import Control.Monad ( forever )
-import System.IO ( hPutStrLn )
+import TCP.Chan ( writeOutput )
 
-main = startServer 12345 $ \n h -> forever $ hPutStrLn h $ "hello " ++ n
+import Control.Monad ( forever )
+
+main :: IO ()
+main = startServer 12345 $ \n _ o ->
+       forever $ writeOutput o ("hello " ++ n)
