@@ -19,7 +19,7 @@
 {-# LANGUAGE CPP, MultiParamTypeClasses, FunctionalDependencies,
              FlexibleInstances, TypeSynonymInstances #-}
 
-module YAML.Reference ( Code(..), tokenize, tokenizeBytes ) where
+module YAML.Reference ( Code(..), tokenize ) where
 
 import           Control.Monad
 import qualified Data.ByteString.Lazy.Char8 as C
@@ -362,10 +362,11 @@ data Code = Bom             -- ^ BOM, contains \"@TF8@\", \"@TF16LE@\", \"@TF32B
           | Error           -- ^ Parsing error at this point.
           | Unparsed        -- ^ Unparsed due to errors (or at end of test).
           | Detected        -- ^ Detected parameter (for testing).
-  deriving Eq
+  deriving ( Eq, Show )
 
 -- | @show code@ converts a 'Code' to the one-character YEAST token code char.
 -- The list of byte codes is also documented in the @yaml2yeast@ program.
+{-
 instance Show Code where
   show code = case code of
                    Bom             -> "U"
@@ -410,7 +411,7 @@ instance Show Code where
                    Error           -> "!"
                    Unparsed        -> "-"
                    Detected        -> "$"
-
+-}
 -- | Parsed token.
 data Token = Token {
     tByteOffset :: Int,   -- ^ 0-base byte offset in stream.
@@ -559,27 +560,26 @@ instance Show State where
 
 -- | @initialState name input@ returns an initial 'State' for parsing the
 -- /input/ (with /name/ for error messages).
-initialState :: String -> C.ByteString -> State
-initialState name input = let (encoding, decoded) = decode input
-                          in State { sName            = name,
-                                     sEncoding        = encoding,
-                                     sDecision        = "",
-                                     sLimit           = -1,
-                                     sForbidden       = Nothing,
-                                     sIsPeek          = False,
-                                     sIsSol           = True,
-                                     sChars           = [],
-                                     sCharsByteOffset = -1,
-                                     sCharsCharOffset = -1,
-                                     sCharsLine       = -1,
-                                     sCharsLineChar   = -1,
-                                     sByteOffset      = 0,
-                                     sCharOffset      = 0,
-                                     sLine            = 1,
-                                     sLineChar        = 0,
-                                     sCode            = Unparsed,
-                                     sLast            = ' ',
-                                     sInput           = decoded }
+initialState :: String -> String -> State
+initialState name input = State { sName            = name,
+                                  sEncoding        = UTF8,
+                                  sDecision        = "",
+                                  sLimit           = -1,
+                                  sForbidden       = Nothing,
+                                  sIsPeek          = False,
+                                  sIsSol           = True,
+                                  sChars           = [],
+                                  sCharsByteOffset = -1,
+                                  sCharsCharOffset = -1,
+                                  sCharsLine       = -1,
+                                  sCharsLineChar   = -1,
+                                  sByteOffset      = 0,
+                                  sCharOffset      = 0,
+                                  sLine            = 1,
+                                  sLineChar        = 0,
+                                  sCode            = Unparsed,
+                                  sLast            = ' ',
+                                  sInput           = zip [1..] input }
 
 -- *** Setters
 --
@@ -1213,7 +1213,7 @@ instance Read Chomp where
 -- @True@). Note that tokens are available \"immediately\", allowing for
 -- streaming of large YAML files with memory requirements depending only on the
 -- YAML nesting level.
-type Tokenizer = String -> C.ByteString -> Bool -> [Token]
+type Tokenizer = String -> String -> Bool -> [Token]
 
 -- | @patternTokenizer pattern@ converts the /pattern/ to a simple 'Tokenizer'.
 patternTokenizer :: Pattern -> Tokenizer
@@ -1289,11 +1289,8 @@ commitBugs reply =
 yaml :: Tokenizer
 yaml = patternTokenizer l_yaml_stream
 
-tokenizeBytes :: String -> C.ByteString -> [(Code,String)]
-tokenizeBytes n t = map (\(Token _ _ _ _ c s) -> (c,s)) $ yaml n t False
-
 tokenize :: String -> String -> [(Code,String)]
-tokenize n t = map (\(Token _ _ _ _ c s) -> (c,s)) $ yaml n (C.pack t) False
+tokenize n t = map (\(Token _ _ _ _ c s) -> (c,s)) $ yaml n t False
 
 #ifdef REAL_CPP
 -- This is how non-ancient C pre-processor do it.

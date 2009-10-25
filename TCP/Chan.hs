@@ -1,4 +1,5 @@
-module TCP.Chan ( ShowRead(..), handle2chans ) where
+module TCP.Chan ( ShowRead(..), handle2io, handle2i, handle2o,
+                  Input, readInput, Output, writeOutput ) where
 
 import Control.Monad ( forever )
 import System.IO ( Handle, hPutStrLn, hGetLine )
@@ -21,8 +22,17 @@ instance CharLike c => ShowRead [c] where
     showLine = map toChar
     readLine = Just . map fromChar
 
-handle2chans :: (ShowRead i, ShowRead o) => Handle -> IO (Chan i, Chan o)
-handle2chans h =
+newtype Input a = Input (Chan a)
+newtype Output a = Output (Chan a)
+
+readInput :: Input a -> IO a
+readInput (Input c) = readChan c
+
+writeOutput :: Output a -> a -> IO ()
+writeOutput (Output c) = writeChan c
+
+handle2io :: (ShowRead i, ShowRead o) => Handle -> IO (Input i, Output o)
+handle2io h =
     do i <- newChan
        o <- newChan
        forkIO $ forever (do x <- hGetLine h
@@ -32,5 +42,19 @@ handle2chans h =
                   `catch` (\_ -> return ())
        forkIO $ forever $ do x <- readChan o
                              hPutStrLn h $ showLine x
-       return (i,o)
+       return (Input i, Output o)
 
+handle2o :: ShowRead o => Handle -> IO (Output o)
+handle2o h = do o <- newChan
+                forkIO $ forever $ do x <- readChan o
+                                      hPutStrLn h $ showLine x
+                return (Output o)
+
+handle2i :: ShowRead i => Handle -> IO (Input i)
+handle2i h = do i <- newChan
+                forkIO $ forever (do x <- hGetLine h
+                                     case readLine $ init x of
+                                       Just a -> writeChan i a
+                                       Nothing -> fail ("bad data: "++x))
+                           `catch` (\_ -> return ())
+                return (Input i)
