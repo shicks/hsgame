@@ -1,4 +1,5 @@
 module TCP.Chan ( ShowRead(..), handle2io, handle2i, handle2o,
+                  pipe,
                   Input, readInput, Output, writeOutput ) where
 
 import Control.Monad ( forever )
@@ -31,7 +32,7 @@ readInput (Input c) = readChan c
 writeOutput :: Output a -> a -> IO ()
 writeOutput (Output c) = writeChan c
 
-handle2io :: (ShowRead i, ShowRead o) => Handle -> IO (Input i, Output o)
+handle2io :: ShowRead a => Handle -> IO (Input a, Output a)
 handle2io h =
     do i <- newChan
        o <- newChan
@@ -58,3 +59,7 @@ handle2i h = do i <- newChan
                                        Nothing -> fail ("bad data: "++x))
                            `catch` (\_ -> return ())
                 return (Input i)
+
+pipe :: IO (Input a, Output a)
+pipe = do c <- newChan
+          return (Input c, Output c)
