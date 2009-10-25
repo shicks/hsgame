@@ -1,5 +1,6 @@
 module YAML ( Node(..), YAML(..),
               -- buildTree, unEscape, tokenize, tokenizeBytes,
+              singleT,
               getScalar, getMapping, getSequence,
               getMappingValues, getMappingList, makeTree, makeTokens,
               showYaml, readYaml, parseYaml, parseYamlList ) where
@@ -7,6 +8,8 @@ module YAML ( Node(..), YAML(..),
 import YAML.Reference ( Code(..), tokenize ) -- , tokenizeBytes )
 import Data.Maybe ( catMaybes )
 import Data.Char ( isHexDigit, isSpace, isAlphaNum )
+import Data.List ( groupBy )
+import Data.Function ( on )
 
 data Node = Leaf String
           | List [Node]
@@ -243,11 +246,21 @@ getMeta (MetaT s:xs) = s++getMeta xs
 getMeta (_:xs) = getMeta xs
 getMeta [] = ""
 
-parseYaml :: String -> [Node]
-parseYaml = parseStream . buildTree . tokenize "-"
+tokenizeLazy :: String -> String -> [(Code,String)]
+tokenizeLazy name = concat . map (tokenize name . unlines)
+                    . groupBetween "..." . lines
+    where groupBetween :: Eq a => a -> [a] -> [[a]]
+          groupBetween s = uncurry (:) . gb
+              where -- gb :: [a] -> ([a],[[a]])
+                    gb [] = ([],[])
+                    gb (x:xs) | x == s    = let (y,ys) = gb xs in ([],y:ys)
+                              | otherwise = let (y,ys) = gb xs in (x:y,ys)
 
-makeTokens = tokenize "-"
-makeTree = buildTree . tokenize "-"
+parseYaml :: String -> [Node]
+parseYaml = parseStream . buildTree . tokenizeLazy "-"
+
+makeTokens = tokenizeLazy "-"
+makeTree = buildTree . tokenizeLazy "-"
 
 parseYamlList :: String -> [Node]
 parseYamlList x = case parseYaml x of
