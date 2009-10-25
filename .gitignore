@@ -13,3 +13,5 @@ dist
 *.config
 yell
 echo
+telnet
+chat
