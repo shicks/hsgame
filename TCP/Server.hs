@@ -1,4 +1,4 @@
-module TCP.Server ( startServer, startRouter ) where
+module TCP.Server ( startServer, startRouter, RouterMessage(M,N) ) where
 
 import Network ( withSocketsDo, listenOn, accept, Socket, PortID(PortNumber) )
 import System.IO ( hSetBuffering, BufferMode(..) )
@@ -23,41 +23,45 @@ startServer p job =
     withSocketsDo $ do s <- listenOn $ PortNumber $ fromIntegral p
                        listenForClients s job
 
-data ClientM agent message = ClientM (Message agent message)
-                           | NewClient agent (Output message)
+data RouterMessage a = M a | N
 
-startRouter :: (ShowRead message, Ord agent) =>
+startRouter :: (ShowRead message, Ord agent, Show agent) =>
                Int -> agent -> (String -> agent -> agent) -> [agent]
-            -> ((Message agent message -> IO ()) -> [agent]
-                    -> Message agent message -> IO ()) -> IO ()
-startRouter port server nameagent agentnames handleMessage =
+            -> Input (Message agent message)
+            -> Output (Message agent (RouterMessage message))
+            -> IO ()
+startRouter port server nameagent agentnames iii ooo =
     withSocketsDo $
     do (server_i,server_o) <- pipe
-       let sendMessage = writeOutput server_o . ClientM
-           serverThread agentmap =
+       let serverThread agentmap =
                do m <- readInput server_i
                   case m of
-                    NewClient a o -> serverThread ((a,o):agentmap)
-                    ClientM mess@(Message _ a _)
-                        | a == server ->
-                            do handleMessage sendMessage (map fst agentmap) mess
-                               serverThread agentmap
-                    ClientM (Message _ to x) ->
+                    Message a _ (Left o) ->
+                        do writeOutput ooo (Message a server N)
+                           serverThread ((a,o):agentmap)
+                    Message f a (Right x)
+                        | a == server -> do writeOutput ooo (Message f a (M x))
+                                            serverThread agentmap
+                    Message _ to (Right x) ->
                         case lookup to agentmap of
                           Just o -> do writeOutput o x
                                        serverThread agentmap
-                          Nothing -> fail "bad agent!"
+                          Nothing -> fail ("bad agent! "++show (to,x))
        forkIO $ serverThread []
+       forkIO $ forever $ do Message fr to m <- readInput iii
+                             putStrLn ("router got Message "++show (fr,to,m))
+                             writeOutput server_o $ Message fr to (Right m)
        sock <- listenOn $ PortNumber $ fromIntegral port
        let listenForConnection (a:as) =
                do (h,n,_) <- accept sock -- ignoring the port number
                   hSetBuffering h LineBuffering
                   (i,o) <- handle2io h
                   let newagent = nameagent n a
-                  writeOutput server_o $ NewClient newagent o
+                  writeOutput server_o $ Message newagent server (Left o)
                   forkIO $ forever $
                          do x <- readInput i
-                            sendMessage (Message newagent server x)
+                            writeOutput server_o
+                                       (Message newagent server (Right x))
                   listenForConnection as
            listenForConnection [] = fail "not enough possible agent names!"
        listenForConnection agentnames
