@@ -32,18 +32,10 @@ readInput (Input c) = readChan c
 writeOutput :: Output a -> a -> IO ()
 writeOutput (Output c) = writeChan c
 
-handle2io :: ShowRead a => Handle -> IO (Input a, Output a)
-handle2io h =
-    do i <- newChan
-       o <- newChan
-       forkIO $ forever (do x <- hGetLine h
-                            case readLine $ init x of
-                              Just a -> writeChan i a
-                              Nothing -> fail ("bad data: "++x))
-                  `catch` (\_ -> return ())
-       forkIO $ forever $ do x <- readChan o
-                             hPutStrLn h $ showLine x
-       return (Input i, Output o)
+handle2io :: (ShowRead i, ShowRead o) => Handle -> IO (Input i, Output o)
+handle2io h = do i <- handle2i h
+                 o <- handle2o h
+                 return (i, o)
 
 handle2o :: ShowRead o => Handle -> IO (Output o)
 handle2o h = do o <- newChan
