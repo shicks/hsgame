@@ -14,4 +14,5 @@ main = build [] $ do -- autoVersion Numbered
                      executable "testyaml" "testyaml.hs" []
                      executable "telnet" "telnet.hs" []
                      executable "chat" "chat.hs" []
+                     executable "purechat" "purechat.hs" []
                      executable "yamltest" "yamltest.hs" []

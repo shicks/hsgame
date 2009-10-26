@@ -1,11 +1,12 @@
-module TCP.Server ( startServer, startRouter, RouterMessage(M,N) ) where
+module TCP.Server ( startServer, startRouter, pureRouter,
+                    RouterMessage(M,N) ) where
 
 import Network ( withSocketsDo, listenOn, accept, Socket, PortID(PortNumber) )
 import System.IO ( hSetBuffering, BufferMode(..) )
 import Control.Concurrent ( forkIO )
 import Control.Monad ( forever )
 
-import TCP.Chan ( ShowRead, Input, Output, writeOutput, readInput,
+import TCP.Chan ( ShowRead, Input, Output, writeOutput, readInput, getInput,
                   pipe, handle2io )
 import TCP.Message ( Message(..) )
 
@@ -65,3 +66,15 @@ startRouter port server nameagent agentnames iii ooo =
                   listenForConnection as
            listenForConnection [] = fail "not enough possible agent names!"
        listenForConnection agentnames
+
+pureRouter :: (ShowRead message, Ord agent, Show agent) =>
+               Int -> agent -> (String -> agent -> agent) -> [agent]
+            -> ([Message agent (RouterMessage message)]
+                    -> [Message agent message])
+            -> IO ()
+pureRouter port server nameagent agentnames f =
+    do (i,o) <- pipe
+       (i2,o2) <- pipe
+       forkIO $ do x <- getInput i
+                   mapM_ (writeOutput o2) $ f x
+       startRouter port server nameagent agentnames i2 o
