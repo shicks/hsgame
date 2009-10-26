@@ -1,16 +1,9 @@
-import TCP.Server ( startServer )
-import TCP.Chan ( readInput, writeOutput )
-import Control.Monad ( forever )
-
-import Control.Concurrent ( forkIO )
-import Control.Concurrent.Chan ( newChan, writeChan, readChan, dupChan )
+import TCP.Server ( pureRouter, RouterMessage(M) )
+import TCP.Message ( Message(Message) )
 
 main :: IO ()
-main = do c <- newChan
-          forkIO $ forever $ getLine >>= writeChan c
-          startServer 12345 $ \n i o ->
-              do c' <- dupChan c
-                 forkIO $ forever $ readChan c' >>= writeOutput o
-                 forever $ do l <- readInput i
-                              writeOutput o l
-                              putStrLn $ n ++ ": " ++ l
+main = pureRouter 12345 "server" (++) agentnames echo
+    where agentnames = map show [1 :: Int ..]
+          echo (Message f t (M s):ms) = Message t f (s :: String) : echo ms
+          echo (_:ms) = echo ms
+          echo [] = []
