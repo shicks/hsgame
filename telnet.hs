@@ -1,17 +1,17 @@
 module Main where
 
 import System.Environment ( getArgs )
-import System.IO ( hPutStrLn, hGetLine )
 import Control.Monad ( forever )
 import Control.Concurrent ( forkIO )
 
 import TCP.Client ( connectToServer )
+import TCP.Chan ( writeOutput, readInput )
 
 main :: IO ()
 main = do [hostname] <- getArgs
-          h <- connectToServer hostname 12345
+          (i,o) <- connectToServer hostname 12345
           forkIO $ forever $ do putStrLn "Waiting for a line!"
-                                y <- hGetLine h
+                                y <- readInput i
                                 putStrLn y
           forever $ do x <- getLine
-                       hPutStrLn h x
+                       writeOutput o x
