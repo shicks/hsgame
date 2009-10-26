@@ -19,6 +19,4 @@ chat xs (Message x t (M s):ms) =
 chat _ [] = []
 
 main :: IO ()
-main = pureRouter 12345 "server" makeagent agentnames $ chat []
-    where agentnames = map show [1 :: Int ..]
-          makeagent = (++)
+main = pureRouter 12345 $ chat []

@@ -5,9 +5,7 @@ import TCP.Chan ( pipe, readInput, writeOutput )
 import Control.Concurrent ( forkIO )
 
 main :: IO ()
-main = do let agentnames = map show [1 :: Int ..]
-              makeagent = (++)
-          (intoroomR,intoroomW) <- pipe
+main = do (intoroomR,intoroomW) <- pipe
           (fromroomR,fromroomW) <- pipe
           let send x m y = writeOutput fromroomW (Message x y m)
               handleRoom xs =
@@ -32,4 +30,4 @@ main = do let agentnames = map show [1 :: Int ..]
                                  else do send x (f++" privately says: "++s) t
                                          handleRoom xs
           forkIO $ handleRoom []
-          startRouter 12345 "server" makeagent agentnames fromroomR intoroomW
+          startRouter 12345 fromroomR intoroomW

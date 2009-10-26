@@ -26,23 +26,27 @@ startServer p job =
 
 data RouterMessage a = M a | N
 
-startRouter :: (ShowRead message, Ord agent, Show agent) =>
-               Int -> agent -> (String -> agent -> agent) -> [agent]
-            -> Input (Message agent message)
-            -> Output (Message agent (RouterMessage message))
+startRouter :: ShowRead message => Int
+            -> Input (Message String message)
+            -> Output (Message String (RouterMessage message))
             -> IO ()
-startRouter port server nameagent agentnames iii ooo =
+startRouter port iii ooo =
     withSocketsDo $
     do (server_i,server_o) <- pipe
        let serverThread agentmap =
                do m <- readInput server_i
                   case m of
-                    Message a _ (Left o) ->
-                        do writeOutput ooo (Message a server N)
-                           serverThread ((a,o):agentmap)
-                    Message f a (Right x)
-                        | a == server -> do writeOutput ooo (Message f a (M x))
-                                            serverThread agentmap
+                    Message a _ (Left (nameo,o)) ->
+                        do let rename x = if x `notElem` map fst agentmap
+                                          then x
+                                          else rename (x++"'")
+                               aa = rename a
+                           writeOutput nameo aa -- report name to socket thread
+                           writeOutput ooo (Message aa "server" N)
+                           serverThread ((aa,o):agentmap)
+                    Message f "server" (Right x) ->
+                        do writeOutput ooo (Message f "server" (M x))
+                           serverThread agentmap
                     Message _ to (Right x) ->
                         case lookup to agentmap of
                           Just o -> do writeOutput o x
@@ -53,28 +57,24 @@ startRouter port server nameagent agentnames iii ooo =
                              putStrLn ("router got Message "++show (fr,to,m))
                              writeOutput server_o $ Message fr to (Right m)
        sock <- listenOn $ PortNumber $ fromIntegral port
-       let listenForConnection (a:as) =
-               do (h,n,_) <- accept sock -- ignoring the port number
-                  hSetBuffering h LineBuffering
-                  (i,o) <- handle2io h
-                  let newagent = nameagent n a
-                  writeOutput server_o $ Message newagent server (Left o)
-                  forkIO $ forever $
-                         do x <- readInput i
-                            writeOutput server_o
-                                       (Message newagent server (Right x))
-                  listenForConnection as
-           listenForConnection [] = fail "not enough possible agent names!"
-       listenForConnection agentnames
+       forever $ do (h,n,_) <- accept sock -- ignoring the port number
+                    hSetBuffering h LineBuffering
+                    (i,o) <- handle2io h
+                    (namei, nameo) <- pipe
+                    writeOutput server_o $ Message n "server" (Left (nameo,o))
+                    name <- readInput namei
+                    forkIO $ forever $
+                          do x <- readInput i
+                             writeOutput server_o
+                                             (Message name "server" (Right x))
 
-pureRouter :: (ShowRead message, Ord agent, Show agent) =>
-               Int -> agent -> (String -> agent -> agent) -> [agent]
-            -> ([Message agent (RouterMessage message)]
-                    -> [Message agent message])
-            -> IO ()
-pureRouter port server nameagent agentnames f =
+pureRouter :: ShowRead message => Int
+           -> ([Message String (RouterMessage message)]
+                   -> [Message String message])
+           -> IO ()
+pureRouter port f =
     do (i,o) <- pipe
        (i2,o2) <- pipe
        forkIO $ do x <- getInput i
                    mapM_ (writeOutput o2) $ f x
-       startRouter port server nameagent agentnames i2 o
+       startRouter port i2 o
