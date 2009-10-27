@@ -12,9 +12,9 @@ data Named message = NamePrompt String | MyNameIs String | NN message
 instance ShowRead message => ShowRead (Named message)
 
 nameServer :: ShowRead message => Int
-            -> Input (Message String message)
-            -> Output (Message String (RouterMessage message))
-            -> IO ()
+           -> Input (Message String message)
+           -> Output (Message String (RouterMessage message))
+           -> IO ()
 nameServer port iii ooo =
     do (intoroomR,intoroomW) <- pipe
        (fromroomR,fromroomW) <- pipe
