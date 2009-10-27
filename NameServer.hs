@@ -7,12 +7,9 @@ import TCP.Message ( Message(..) )
 import Control.Concurrent ( forkIO )
 import Control.Monad ( forever )
 
-data Named message = MyNameIs String | Named message
+data Named message = NamePrompt String | MyNameIs String | NN message
                      deriving (Show, Read)
 instance ShowRead message => ShowRead (Named message)
-data NamedClient message = NamePrompt String | NamedClient message
-                     deriving (Show, Read)
-instance ShowRead message => ShowRead (NamedClient message)
 
 nameServer :: ShowRead message => Int
             -> Input (Message String message)
@@ -28,7 +25,10 @@ nameServer port iii ooo =
                   case m of
                     Message x _ N ->
                         do sendToClient x
-                                (MyNameIs "Welcome to our chat server!")
+                                (NamePrompt "Welcome to our chat server!")
+                           handleNet xs
+                    Message _ _ (M (NamePrompt _)) ->
+                        do putStrLn "silly client talks like a server!"
                            handleNet xs
                     Message x _ (M (MyNameIs n)) ->
                         case lookup x xs of
@@ -38,7 +38,7 @@ nameServer port iii ooo =
                                         writeOutput ooo (Message n "server" N)
                                         writeOutput busW (Left (n,x))
                                         handleNet $ (x,n):xs
-                    Message x t (M (Named z)) ->
+                    Message x t (M (NN z)) ->
                            case lookup x xs of
                              Nothing -> do putStrLn ("Message from ... "++x)
                                            handleNet xs -- log bad message?
@@ -64,8 +64,7 @@ nameServer port iii ooo =
                               case lookup tn xs of
                                 Nothing -> handleServer xs
                                 Just t ->
-                                    do writeOutput fromroomW
-                                                       (Message f t (Named z))
-                                       handleServer xs
+                                   do writeOutput fromroomW (Message f t (NN z))
+                                      handleServer xs
        forkIO $ handleServer [("server","server")]
        startRouter port fromroomR intoroomW 
