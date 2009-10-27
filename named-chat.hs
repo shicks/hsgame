@@ -25,4 +25,4 @@ main = do (intoroomR,intoroomW) <- pipe
                            else do send f (f++" privately says: "++s) t
                                    handleRoom xs
           forkIO $ handleRoom []
-          nameServer 12345 fromroomR intoroomW
+          nameServer 12345 "server" fromroomR intoroomW
