@@ -19,52 +19,52 @@ nameServer port iii ooo =
     do (intoroomR,intoroomW) <- pipe
        (fromroomR,fromroomW) <- pipe
        (busR,busW) <- pipe
-       let sendToClient y m = writeOutput fromroomW (Message "server" y m)
-           handleNet xs =
-               do m <- readInput intoroomR
-                  case m of
-                    Message x _ N ->
-                        do sendToClient x
-                                (NamePrompt "Welcome to our chat server!")
-                           handleNet xs
-                    Message _ _ (M (NamePrompt _)) ->
-                        do putStrLn "silly client talks like a server!"
-                           handleNet xs
-                    Message x _ (M (MyNameIs n)) ->
-                        case lookup x xs of
-                          Just f -> do putStrLn ("Your name is already "++f)
-                                       handleNet xs
-                          Nothing -> do putStrLn ("New user "++n)
-                                        writeOutput ooo (Message n "server" N)
-                                        writeOutput busW (Left (n,x))
-                                        handleNet $ (x,n):xs
-                    Message x t (M (NN z)) ->
-                           case lookup x xs of
-                             Nothing -> do putStrLn ("Message from ... "++x)
-                                           handleNet xs -- log bad message?
-                             Just nf ->
-                                 case lookup t xs of
-                                   Nothing ->
-                                       do putStrLn ("Message for unknown "++t++" from "++nf)
-                                          handleNet xs
-                                   Just nt ->
-                                        do putStrLn ("Message from "++nf)
-                                           writeOutput ooo (Message nf nt (M z))
-                                           handleNet xs
-       forkIO $ handleNet [("server","server")]
        forkIO $ forever $ readInput iii >>= (writeOutput busW . Right)
-       let handleServer xs =
+       forkIO $ forever $ readInput intoroomR >>= (writeOutput busW . Left)
+       let handler xs =
                do m <- readInput busR
                   case m of
-                    Left x -> handleServer (x:xs)
+                    Left (Message x _ N) ->
+                        do writeOutput fromroomW $ Message "server" x
+                                (NamePrompt "Welcome to our chat server!")
+                           handler xs
+                    Left (Message _ _ (M (NamePrompt _))) ->
+                        do putStrLn "silly client talks like a server!"
+                           handler xs
+                    Left (Message x _ (M (MyNameIs n))) ->
+                        case lookup x xs of
+                          Just f -> do putStrLn ("Your name is already "++f)
+                                       handler xs
+                          Nothing -> do putStrLn ("New user "++n)
+                                        writeOutput ooo (Message n "server" N)
+                                        handler $ (x,n):xs
+                    Left (Message x t (M (NN z))) ->
+                        case lookup x xs of
+                        Nothing -> do putStrLn ("Message from ... "++x++
+                                               " for "++t)
+                                      handler xs -- log bad message?
+                        Just nf ->
+                          case lookup t xs of
+                          Nothing ->
+                             do putStrLn ("Message for "++t++"? from "++nf)
+                                handler xs
+                          Just nt ->
+                               do putStrLn ("Message from "++nf)
+                                  writeOutput ooo (Message nf nt (M z))
+                                  handler xs
                     Right (Message fn tn z) ->
-                        case lookup fn xs of
-                          Nothing -> handleServer xs
+                        case rlookup fn xs of
+                          Nothing -> do putStrLn ("foobar "++fn)
+                                        handler xs
                           Just f ->
-                              case lookup tn xs of
-                                Nothing -> handleServer xs
+                              case rlookup tn xs of
+                                Nothing -> do putStrLn ("bazbar "++tn)
+                                              handler xs
                                 Just t ->
                                    do writeOutput fromroomW (Message f t (NN z))
-                                      handleServer xs
-       forkIO $ handleServer [("server","server")]
+                                      handler xs
+       forkIO $ handler [("server","server")]
        startRouter port fromroomR intoroomW 
+
+rlookup :: Eq a => a -> [(b,a)] -> Maybe b
+rlookup x y = lookup x $ map (\ (a,b) -> (b,a)) y
