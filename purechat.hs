@@ -1,4 +1,5 @@
-import TCP.Server ( pureRouter, RouterMessage(M,N) )
+import TCP.Server ( startRouter )
+import TCP.Router ( pureRouter, RouterMessage(M,N) )
 import TCP.Message ( Message(..) )
 
 chat :: [(String,String)] -> [Message String (RouterMessage String)]
@@ -19,4 +20,4 @@ chat xs (Message x t (M s):ms) =
 chat _ [] = []
 
 main :: IO ()
-main = pureRouter 12345 $ chat []
+main = startRouter 12345 $ pureRouter $ chat []

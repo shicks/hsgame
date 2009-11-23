@@ -1,13 +1,11 @@
-import TCP.Server ( startRouter, RouterMessage(M,N) )
+import TCP.Router ( RouterMessage(M,N), ioRouter )
+import TCP.Server ( startRouter )
 import TCP.Message ( Message(..) )
-import TCP.Chan ( pipe, readInput, writeOutput )
-
-import Control.Concurrent ( forkIO )
+import TCP.Chan ( readInput, writeOutput )
 
 main :: IO ()
-main = do (intoroomR,intoroomW) <- pipe
-          (fromroomR,fromroomW) <- pipe
-          let send x m y = writeOutput fromroomW (Message x y m)
+main = startRouter 12345 $ ioRouter $ \fromroomW intoroomR ->
+       do let send x m y = writeOutput fromroomW (Message x y m)
               handleRoom xs =
                   do m <- readInput intoroomR
                      case m of
@@ -29,5 +27,5 @@ main = do (intoroomR,intoroomW) <- pipe
                                          handleRoom xs
                                  else do send x (f++" privately says: "++s) t
                                          handleRoom xs
-          forkIO $ handleRoom []
-          startRouter 12345 fromroomR intoroomW
+          handleRoom []
+

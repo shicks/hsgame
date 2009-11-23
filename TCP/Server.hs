@@ -1,14 +1,14 @@
-module TCP.Server ( startServer, startRouter, pureRouter,
-                    RouterMessage(M,N) ) where
+module TCP.Server ( startServer, startRouter ) where
 
 import Network ( withSocketsDo, listenOn, accept, Socket, PortID(PortNumber) )
 import System.IO ( hSetBuffering, BufferMode(..) )
 import Control.Concurrent ( forkIO )
 import Control.Monad ( forever )
 
-import TCP.Chan ( ShowRead, Input, Output, writeOutput, readInput, getInput,
-                  pipe, handle2io )
+import TCP.Chan ( ShowRead, Input, Output, writeOutput, readInput, pipe,
+                  handle2io )
 import TCP.Message ( Message(..) )
+import TCP.Router ( Router, RouterMessage(..), forkRouter )
 
 listenForClients :: ShowRead a =>
                     Socket -> (String -> Input a -> Output a -> IO ()) -> IO ()
@@ -24,15 +24,11 @@ startServer p job =
     withSocketsDo $ do s <- listenOn $ PortNumber $ fromIntegral p
                        listenForClients s job
 
-data RouterMessage a = M a | N
-
-startRouter :: ShowRead message => Int
-            -> Input (Message String message)
-            -> Output (Message String (RouterMessage message))
-            -> IO ()
-startRouter port iii ooo =
+startRouter :: ShowRead message => Int -> Router String message -> IO ()
+startRouter port r =
     withSocketsDo $
-    do (server_i,server_o) <- pipe
+    do (iii, ooo) <- forkRouter r
+       (server_i,server_o) <- pipe
        let serverThread agentmap =
                do m <- readInput server_i
                   case m of
@@ -67,14 +63,3 @@ startRouter port iii ooo =
                           do x <- readInput i
                              writeOutput server_o
                                              (Message name "server" (Right x))
-
-pureRouter :: ShowRead message => Int
-           -> ([Message String (RouterMessage message)]
-                   -> [Message String message])
-           -> IO ()
-pureRouter port f =
-    do (i,o) <- pipe
-       (i2,o2) <- pipe
-       forkIO $ do x <- getInput i
-                   mapM_ (writeOutput o2) $ f x
-       startRouter port i2 o
