@@ -1,38 +1,18 @@
-module NameServer where
+module NameServer ( nameServer ) where
 
-import TCP.Router ( Router, RouterMessage(..), ioRouter, forkRouter )
-import TCP.Chan ( ShowRead, Input, Output, writeOutput, readInput, pipe )
+import TCP.Router ( RouterMessage(..), RouterConnector, ioConnector )
+import TCP.Chan ( ShowRead, writeOutput, readInput )
 import TCP.Message ( Message(..) )
-
-import Control.Concurrent ( forkIO )
-import Control.Monad ( forever )
 
 data Named name message = NamePrompt String | MyNameIs name | NN message
                           deriving (Show, Read)
 instance (ShowRead name, ShowRead message) => ShowRead (Named name message)
 
-data RouterConnector up upmess down downmess =
-    RC (Output (Message up upmess) ->
-        Output (Message down (RouterMessage downmess)) ->
-        Input (Either (Message up (RouterMessage upmess))
-                      (Message down downmess)) ->
-        IO ())
-
-connectRouter :: RouterConnector up upmess down downmess
-              -> Router down downmess -> Router up upmess
-connectRouter (RC f) r = ioRouter $ \oup iup ->
-    do (idown,odown) <- forkRouter r
-       (iboth, oboth) <- pipe
-       forkIO (f oup odown iboth)
-       forkIO $ forever $ readInput idown >>= (writeOutput oboth . Right)
-       forkIO $ forever $ readInput iup >>= (writeOutput oboth . Left)
-       return ()
-
 nameServer :: (Eq client, ShowRead client, Eq name, ShowRead name,
                ShowRead message) =>
               client -> name
            -> RouterConnector client (Named name message) name message
-nameServer upserver server = RC $ \oup odown i ->
+nameServer upserver server = ioConnector $ \oup odown i ->
     do let handler xs =
              do m <- readInput i
                 case m of

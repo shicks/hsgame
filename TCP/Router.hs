@@ -1,7 +1,10 @@
-module TCP.Router ( Router, RouterMessage(..), forkRouter,
-                    ioRouter, pureRouter ) where
+module TCP.Router ( Router, RouterConnector, RouterMessage(..), forkRouter,
+                    ioRouter, pureRouter,
+                    ioConnector, connectRouter ) where
 
-import TCP.Chan ( Input, Output, pipe, getInput, writeOutput )
+import Control.Monad ( forever )
+
+import TCP.Chan ( Input, Output, pipe, getInput, writeOutput, readInput )
 import TCP.Message ( Message )
 import Control.Concurrent ( forkIO )
 
@@ -29,3 +32,28 @@ forkRouter (Router f) = do (i,o) <- pipe
                            (i2,o2) <- pipe
                            forkIO $ f o i2
                            return (i, o2)
+
+data RouterConnector up upmess down downmess =
+    RC (Output (Message up upmess) ->
+        Output (Message down (RouterMessage downmess)) ->
+        Input (Either (Message up (RouterMessage upmess))
+                      (Message down downmess)) ->
+        IO ())
+
+ioConnector :: (Output (Message up upmess) ->
+                Output (Message down (RouterMessage downmess)) ->
+                Input (Either (Message up (RouterMessage upmess))
+                       (Message down downmess)) ->
+                IO ())
+            -> RouterConnector up upmess down downmess
+ioConnector = RC
+
+connectRouter :: RouterConnector up upmess down downmess
+              -> Router down downmess -> Router up upmess
+connectRouter (RC f) r = ioRouter $ \oup iup ->
+    do (idown,odown) <- forkRouter r
+       (iboth, oboth) <- pipe
+       forkIO (f oup odown iboth)
+       forkIO $ forever $ readInput idown >>= (writeOutput oboth . Right)
+       forkIO $ forever $ readInput iup >>= (writeOutput oboth . Left)
+       return ()

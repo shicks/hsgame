@@ -1,8 +1,8 @@
-import TCP.Router ( RouterMessage(M,N), ioRouter )
+import TCP.Router ( RouterMessage(M,N), ioRouter, connectRouter )
 import TCP.Server ( startRouter )
 import TCP.Message ( Message(..) )
 import TCP.Chan ( readInput, writeOutput )
-import NameServer ( connectRouter, nameServer )
+import NameServer ( nameServer )
 
 main :: IO ()
 main = startRouter 12345 $
