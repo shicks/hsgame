@@ -1,4 +1,4 @@
-module TCP.Server ( startRouter ) where
+module TCP.Server ( runServerTCP ) where
 
 import Network ( withSocketsDo, listenOn, accept, PortID(PortNumber) )
 import System.IO ( hSetBuffering, BufferMode(..) )
@@ -8,17 +8,17 @@ import Control.Monad ( forever )
 import TCP.Chan ( ShowRead, Output, writeOutput, readInput, pipe,
                   handle2io )
 import TCP.Message ( Message(..) )
-import TCP.Router ( Router, RouterMessage(..), forkRouter )
+import TCP.ServerTypes ( Server, ServerMessage(..), forkServer )
 
 data Internal name toclient toserver = ToClient toclient
                                      | ToServer toserver
                                      | NewClient (Output toclient) (Output name)
 
-startRouter :: (ShowRead toclient, ShowRead toserver) =>
-               Int -> Router String toclient (RouterMessage toserver) -> IO ()
-startRouter port r =
+runServerTCP :: (ShowRead toclient, ShowRead toserver) =>
+                Int -> Server String toclient (ServerMessage toserver) -> IO ()
+runServerTCP port r =
     withSocketsDo $
-    do (iii, ooo) <- forkRouter r
+    do (iii, ooo) <- forkServer r
        (server_i,server_o) <- pipe
        let serverThread agentmap =
                do m <- readInput server_i

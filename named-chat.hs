@@ -1,12 +1,12 @@
-import TCP.Router ( RouterMessage(M,N), ioRouter, connectRouter )
-import TCP.Server ( startRouter )
+import TCP.ServerTypes ( ServerMessage(M,N), ioServer, modifyServer )
+import TCP.Server ( runServerTCP )
 import TCP.Message ( Message(..) )
 import TCP.Chan ( readInput, writeOutput )
-import NameServer ( nameServer )
+import NamePicker ( pickNames )
 
 main :: IO ()
-main = startRouter 12345 $
-       connectRouter (nameServer "server" "server") $ ioRouter $
+main = runServerTCP 12345 $
+       modifyServer (pickNames "server" "server") $ ioServer $
        \fromroomW intoroomR ->
           do let send x m y = writeOutput fromroomW (Message x y m)
                  handleRoom xs =

@@ -1,6 +1,6 @@
-module NameServer ( nameServer ) where
+module NamePicker ( pickNames ) where
 
-import TCP.Router ( RouterMessage(..), RouterConnector, ioConnector )
+import TCP.ServerTypes ( ServerMessage(..), ServerModifier, ioConnector )
 import TCP.Chan ( ShowRead, writeOutput, readInput )
 import TCP.Message ( Message(..) )
 
@@ -8,11 +8,11 @@ data Named name message = NamePrompt String | MyNameIs name | NN message
                           deriving (Show, Read)
 instance (ShowRead name, ShowRead message) => ShowRead (Named name message)
 
-nameServer :: (Eq client, ShowRead client, Eq name, ShowRead name,
-               ShowRead message) =>
-              client -> name
-           -> RouterConnector client (Named name message) name message
-nameServer upserver server = ioConnector $ \oup odown i ->
+pickNames :: (Eq client, ShowRead client, Eq name, ShowRead name,
+              ShowRead message) =>
+             client -> name
+          -> ServerModifier client (Named name message) name message
+pickNames upserver server = ioConnector $ \oup odown i ->
     do let handler xs =
              do m <- readInput i
                 case m of

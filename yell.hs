@@ -1,5 +1,5 @@
-import TCP.Server ( startRouter )
-import TCP.Router ( ioRouter, RouterMessage(M,N) )
+import TCP.Server ( runServerTCP )
+import TCP.ServerTypes ( ioServer, ServerMessage(M,N) )
 import TCP.Message ( Message(Message) )
 import TCP.Chan ( writeOutput, readInput )
 
@@ -7,7 +7,7 @@ import Control.Monad ( forever )
 import Control.Concurrent ( forkIO )
 
 main :: IO ()
-main = startRouter 12345 $  ioRouter handle
+main = runServerTCP 12345 $  ioServer handle
     where handle fromRoomW intoRoomR = forever $
               do m <- readInput intoRoomR
                  case m of

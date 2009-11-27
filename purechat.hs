@@ -1,8 +1,8 @@
-import TCP.Server ( startRouter )
-import TCP.Router ( pureRouter, RouterMessage(M,N) )
+import TCP.Server ( runServerTCP )
+import TCP.ServerTypes ( pureServer, ServerMessage(M,N) )
 import TCP.Message ( Message(..) )
 
-chat :: [(String,String)] -> [Message String (RouterMessage String)]
+chat :: [(String,String)] -> [Message String (ServerMessage String)]
      -> [Message String String]
 chat xs (Message x _ N:ms) =
     Message "server" x "Welcome to our chat server!" :
@@ -20,4 +20,4 @@ chat xs (Message x t (M s):ms) =
 chat _ [] = []
 
 main :: IO ()
-main = startRouter 12345 $ pureRouter $ chat []
+main = runServerTCP 12345 $ pureServer $ chat []
