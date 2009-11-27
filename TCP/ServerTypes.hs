@@ -56,7 +56,6 @@ modifyServer :: ServerModifier up uptoclient uptoserver
 modifyServer (RC f) r = ioServer $ \oup iup ->
     do (idown,odown) <- forkServer r
        (iboth, oboth) <- pipe
-       forkIO (f oup odown iboth)
        forkIO $ forever $ readInput idown >>= (writeOutput oboth . Right)
        forkIO $ forever $ readInput iup >>= (writeOutput oboth . Left)
-       return ()
+       f oup odown iboth
