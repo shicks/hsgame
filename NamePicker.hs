@@ -4,16 +4,20 @@ import TCP.ServerTypes ( ServerMessage(..), ServerModifier, ioConnector )
 import TCP.Chan ( ShowRead, writeOutput, readInput )
 import TCP.Message ( Message(..) )
 
-data Named name message = NamePrompt String | MyNameIs name | NN message
-                          deriving (Show, Read)
-instance (ShowRead name, ShowRead message) => ShowRead (Named name message)
+data NC name message = NamePrompt String | NC message
+                               deriving (Show, Read)
+instance (ShowRead name, ShowRead message) => ShowRead (NC name message)
+
+data NS name message = MyNameIs name | NS message
+                               deriving (Show, Read)
+instance (ShowRead name, ShowRead message) => ShowRead (NS name message)
 
 pickNames :: (Eq client, ShowRead client, Eq name, ShowRead name,
-              ShowRead message) =>
+              ShowRead toclient, ShowRead toserver) =>
              client -> name
-          -> ServerModifier client (Named name message)
-                                   (ServerMessage (Named name message))
-                            name message (ServerMessage message)
+          -> ServerModifier client (NC name toclient)
+                                   (ServerMessage (NS name toserver))
+                            name toclient (ServerMessage toserver)
 pickNames upserver server = ioConnector $ \oup odown i ->
     do let handler xs =
              do m <- readInput i
@@ -22,9 +26,6 @@ pickNames upserver server = ioConnector $ \oup odown i ->
                     do writeOutput oup $ Message upserver x
                                 (NamePrompt "Welcome to our chat server!")
                        handler xs
-                  Left (Message _ _ (M (NamePrompt _))) ->
-                      do putStrLn "silly client talks like a server!"
-                         handler xs
                   Left (Message x _ (M (MyNameIs n))) ->
                       case lookup x xs of
                         Just f -> do putStrLn ("Your name is already "++ show f)
@@ -32,7 +33,7 @@ pickNames upserver server = ioConnector $ \oup odown i ->
                         Nothing -> do putStrLn ("New user "++show n)
                                       writeOutput odown (Message n server N)
                                       handler $ (x,n):xs
-                  Left (Message x t (M (NN z))) ->
+                  Left (Message x t (M (NS z))) ->
                       case lookup x xs of
                         Nothing -> do putStrLn ("Message from ... "++show x++
                                                 " for "++show t)
@@ -56,7 +57,7 @@ pickNames upserver server = ioConnector $ \oup odown i ->
                               Nothing -> do putStrLn ("bazbar "++show tn)
                                             handler xs
                               Just t ->
-                                  do writeOutput oup (Message f t (NN z))
+                                  do writeOutput oup (Message f t (NC z))
                                      handler xs
        handler [(upserver,server)]
 
