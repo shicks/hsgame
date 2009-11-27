@@ -47,7 +47,7 @@ handle2o h = do o <- newChan
 handle2i :: ShowRead i => Handle -> IO (Input i)
 handle2i h = do i <- newChan
                 forkIO $ forever (do x <- hGetLine h
-                                     case readLine $ init x of
+                                     case readLine x of
                                        Just a -> writeChan i a
                                        Nothing -> fail ("bad data: "++x))
                            `catch` (\_ -> return ())

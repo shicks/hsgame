@@ -1,8 +1,11 @@
-module NamePicker ( pickNames ) where
+module NamePicker ( pickNames, namedClient ) where
 
+import TCP.Client ( ClientModifier, ioClientModifier )
 import TCP.ServerTypes ( ServerMessage(..), ServerModifier, ioConnector )
 import TCP.Chan ( ShowRead, writeOutput, readInput )
 import TCP.Message ( Message(..) )
+
+import Control.Monad ( forever )
 
 data NC name message = NamePrompt String | NC message
                                deriving (Show, Read)
@@ -11,6 +14,20 @@ instance (ShowRead name, ShowRead message) => ShowRead (NC name message)
 data NS name message = MyNameIs name | NS message
                                deriving (Show, Read)
 instance (ShowRead name, ShowRead message) => ShowRead (NS name message)
+
+namedClient :: (ShowRead toclient, ShowRead toserver) =>
+               ClientModifier (NC String toclient) (NS String toserver)
+                              toclient toserver
+namedClient = ioClientModifier $ \otoserver otoclient i -> forever $
+              do inp <- readInput i
+                 case inp of
+                   Left (NamePrompt p) -> do putStrLn p
+                                             n <- getLine
+                                             writeOutput otoserver (MyNameIs n)
+                   Left (NC x) -> do -- putStrLn ("client got message "++show x)
+                                     writeOutput otoclient x
+                   Right x -> do putStrLn ("client sent message "++show x)
+                                 writeOutput otoserver (NS x)
 
 pickNames :: (Eq client, ShowRead client, Eq name, ShowRead name,
               ShowRead toclient, ShowRead toserver) =>
@@ -24,7 +41,7 @@ pickNames upserver server = ioConnector $ \oup odown i ->
                 case m of
                   Left (Message x _ N) ->
                     do writeOutput oup $ Message upserver x
-                                (NamePrompt "Welcome to our chat server!")
+                                (NamePrompt "Welcome to our chat server!\nWhat is your name?")
                        handler xs
                   Left (Message x _ (M (MyNameIs n))) ->
                       case lookup x xs of

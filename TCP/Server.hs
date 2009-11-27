@@ -41,7 +41,7 @@ runServerTCP port r =
                           Nothing -> fail ("bad agent! "++show (to,x))
        forkIO $ serverThread []
        forkIO $ forever $ do Message fr to m <- readInput iii
-                             putStrLn ("router got Message "++show (fr,to,m))
+                             putStrLn ("message for client: "++show (fr,to,m))
                              writeOutput server_o $ Message fr to (ToClient m)
        sock <- listenOn $ PortNumber $ fromIntegral port
        forever $ do (h,n,_) <- accept sock -- ignoring the port number
