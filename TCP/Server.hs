@@ -24,7 +24,12 @@ startServer p job =
     withSocketsDo $ do s <- listenOn $ PortNumber $ fromIntegral p
                        listenForClients s job
 
-startRouter :: ShowRead message => Int -> Router String message -> IO ()
+data Internal name toclient toserver = ToClient toclient
+                                     | ToServer toserver
+                                     | NewClient (Output toclient) (Output name)
+
+startRouter :: (ShowRead toclient, ShowRead toserver) =>
+               Int -> Router String toclient (RouterMessage toserver) -> IO ()
 startRouter port r =
     withSocketsDo $
     do (iii, ooo) <- forkRouter r
@@ -32,7 +37,7 @@ startRouter port r =
        let serverThread agentmap =
                do m <- readInput server_i
                   case m of
-                    Message a _ (Left (nameo,o)) ->
+                    Message a _ (NewClient o nameo) ->
                         do let rename x = if x `notElem` map fst agentmap
                                           then x
                                           else rename (x++"'")
@@ -40,10 +45,10 @@ startRouter port r =
                            writeOutput nameo aa -- report name to socket thread
                            writeOutput ooo (Message aa "server" N)
                            serverThread ((aa,o):agentmap)
-                    Message f "server" (Right x) ->
+                    Message f _ (ToServer x) ->
                         do writeOutput ooo (Message f "server" (M x))
                            serverThread agentmap
-                    Message _ to (Right x) ->
+                    Message _ to (ToClient x) ->
                         case lookup to agentmap of
                           Just o -> do writeOutput o x
                                        serverThread agentmap
@@ -51,15 +56,16 @@ startRouter port r =
        forkIO $ serverThread []
        forkIO $ forever $ do Message fr to m <- readInput iii
                              putStrLn ("router got Message "++show (fr,to,m))
-                             writeOutput server_o $ Message fr to (Right m)
+                             writeOutput server_o $ Message fr to (ToClient m)
        sock <- listenOn $ PortNumber $ fromIntegral port
        forever $ do (h,n,_) <- accept sock -- ignoring the port number
                     hSetBuffering h LineBuffering
                     (i,o) <- handle2io h
                     (namei, nameo) <- pipe
-                    writeOutput server_o $ Message n "server" (Left (nameo,o))
+                    writeOutput server_o $
+                                Message n "server" (NewClient o nameo)
                     name <- readInput namei
                     forkIO $ forever $
                           do x <- readInput i
-                             writeOutput server_o
-                                             (Message name "server" (Right x))
+                             writeOutput server_o $
+                                         Message name "server" (ToServer x)

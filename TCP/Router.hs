@@ -10,24 +10,24 @@ import Control.Concurrent ( forkIO )
 
 data RouterMessage a = M a | N
 
-data Router agent message =
-    Router (Output (Message agent message) ->
-            Input (Message agent (RouterMessage message)) -> IO ())
+data Router agent messageToClient messageToServer =
+    Router (Output (Message agent messageToClient) ->
+            Input (Message agent messageToServer) -> IO ())
 
-ioRouter :: (Output (Message agent message)
-             -> Input (Message agent (RouterMessage message))
+ioRouter :: (Output (Message agent toclient)
+             -> Input (Message agent toserver)
              -> IO ())
-         -> Router agent message
+         -> Router agent toclient toserver
 ioRouter = Router
 
-pureRouter :: ([Message agent (RouterMessage message)]
-                   -> [Message agent message]) -> Router agent message
+pureRouter :: ([Message agent toserver] -> [Message agent toclient])
+           -> Router agent toclient toserver
 pureRouter f = Router $ \o i -> do x <- getInput i
                                    mapM_ (writeOutput o) $ f x
 
-forkRouter :: Router agent message
-           -> IO (Input (Message agent message),
-                  Output (Message agent (RouterMessage message)))
+forkRouter :: Router agent toclient toserver
+           -> IO (Input (Message agent toclient),
+                  Output (Message agent toserver))
 forkRouter (Router f) = do (i,o) <- pipe
                            (i2,o2) <- pipe
                            forkIO $ f o i2
@@ -49,7 +49,8 @@ ioConnector :: (Output (Message up upmess) ->
 ioConnector = RC
 
 connectRouter :: RouterConnector up upmess down downmess
-              -> Router down downmess -> Router up upmess
+              -> Router down downmess (RouterMessage downmess)
+              -> Router up upmess (RouterMessage upmess)
 connectRouter (RC f) r = ioRouter $ \oup iup ->
     do (idown,odown) <- forkRouter r
        (iboth, oboth) <- pipe
