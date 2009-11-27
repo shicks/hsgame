@@ -1,5 +1,5 @@
-module TCP.Client ( runClientTCP, pureClient, ioClient, decoupledClient,
-                    ClientModifier, modifyClient,
+module TCP.Client ( Client, runClientTCP, pureClient, ioClient, decoupledClient,
+                    forkClient, ClientModifier, modifyClient,
                     ioClientModifier, pureClientModifier ) where
 
 import Network ( connectTo, PortID(PortNumber) )

@@ -26,7 +26,7 @@ namedClient = ioClientModifier $ \otoserver otoclient i -> forever $
                                              writeOutput otoserver (MyNameIs n)
                    Left (NC x) -> do -- putStrLn ("client got message "++show x)
                                      writeOutput otoclient x
-                   Right x -> do putStrLn ("client sent message "++show x)
+                   Right x -> do -- putStrLn ("client sent message "++show x)
                                  writeOutput otoserver (NS x)
 
 pickNames :: (Eq client, ShowRead client, Eq name, ShowRead name,
