@@ -33,24 +33,26 @@ forkServer (Server f) = do (i,o) <- pipe
                            forkIO $ f o i2
                            return (i, o2)
 
-data ServerModifier up upmess down downmess =
-    RC (Output (Message up upmess) ->
-        Output (Message down (ServerMessage downmess)) ->
-        Input (Either (Message up (ServerMessage upmess))
-                      (Message down downmess)) ->
+data ServerModifier up uptoclient uptoserver down downtoclient downtoserver =
+    RC (Output (Message up uptoclient) ->
+        Output (Message down downtoserver) ->
+        Input (Either (Message up uptoserver)
+                      (Message down downtoclient)) ->
         IO ())
 
-ioConnector :: (Output (Message up upmess) ->
-                Output (Message down (ServerMessage downmess)) ->
-                Input (Either (Message up (ServerMessage upmess))
-                       (Message down downmess)) ->
+ioConnector :: (Output (Message up uptoclient) ->
+                Output (Message down downtoserver) ->
+                Input (Either (Message up uptoserver)
+                              (Message down downtoclient)) ->
                 IO ())
-            -> ServerModifier up upmess down downmess
+            -> ServerModifier up uptoclient uptoserver
+                              down downtoclient downtoserver
 ioConnector = RC
 
-modifyServer :: ServerModifier up upmess down downmess
-             -> Server down downmess (ServerMessage downmess)
-             -> Server up upmess (ServerMessage upmess)
+modifyServer :: ServerModifier up uptoclient uptoserver
+                               down downtoclient downtoserver
+             -> Server down downtoclient downtoserver
+             -> Server up uptoclient uptoserver
 modifyServer (RC f) r = ioServer $ \oup iup ->
     do (idown,odown) <- forkServer r
        (iboth, oboth) <- pipe

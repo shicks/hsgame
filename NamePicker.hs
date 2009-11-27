@@ -11,7 +11,9 @@ instance (ShowRead name, ShowRead message) => ShowRead (Named name message)
 pickNames :: (Eq client, ShowRead client, Eq name, ShowRead name,
               ShowRead message) =>
              client -> name
-          -> ServerModifier client (Named name message) name message
+          -> ServerModifier client (Named name message)
+                                   (ServerMessage (Named name message))
+                            name message (ServerMessage message)
 pickNames upserver server = ioConnector $ \oup odown i ->
     do let handler xs =
              do m <- readInput i
