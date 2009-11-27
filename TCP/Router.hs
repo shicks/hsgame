@@ -53,7 +53,6 @@ connectRouter :: RouterConnector up upmess down downmess
 connectRouter (RC f) r = ioRouter $ \oup iup ->
     do (idown,odown) <- forkRouter r
        (iboth, oboth) <- pipe
-       forkIO (f oup odown iboth)
        forkIO $ forever $ readInput idown >>= (writeOutput oboth . Right)
        forkIO $ forever $ readInput iup >>= (writeOutput oboth . Left)
-       return ()
+       f oup odown iboth
