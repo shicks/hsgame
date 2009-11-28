@@ -65,10 +65,17 @@ play = do winner <- endGame
           getScores (_:xs) = getScores xs
                            
 turn = :: Game ()
-turn = do p <- gets currentTurn
-          hand <- 
-          cs <- askCards p -- ....?
-
+turn = do self <- gets currentTurn
+          actions
+          buys
           -- next turn
           n <- gets $ length . gamePlayers
           modify $ \s -> s { currentTurn = (p+1)`mod`n }
+    where actions = do h <- hand self
+                       let as = filter (isAction) h
+                       cs <- askCards p as SelectAction (0,1)
+                       when (not $ null cs) $ do plusActions (-1)
+                                                 getAction $ head cs
+                       acts <- gets $ turnActions . turnState
+                       when (acts > 0) actions
+          buys = do ---
