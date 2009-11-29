@@ -1,8 +1,9 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Dominion.Types ( GameState(..), PlayerState(..), Game,
+                        withTurn, TurnState(..),
                         MessageToServer(..), MessageToClient(..),
-                        Card(..), Answer(..), QuestionMessage(..),
+                        Card(..), CardType(..), Answer(..), QuestionMessage(..),
                         QId, CId, PId ) where
 
 import Control.Concurrent.Chan ( Chan, writeChan, readChan )

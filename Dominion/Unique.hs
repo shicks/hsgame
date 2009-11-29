@@ -1,4 +1,4 @@
-module Dominion.Unique ( newQId, newCId ) where
+module Dominion.Unique ( newQId, newCId, copyCard ) where
 
 import Dominion.Types ( GameState(_qIds,_cIds), Game, QId, CId, Card(..) )
 
