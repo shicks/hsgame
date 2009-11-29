@@ -1,6 +1,10 @@
 import Dominion
 
+import TCP.Message ( Message(..) )
 import TCP.Client ( runClientTCP, ioClient )
+import TCP.Server ( runServerTCP )
+import TCP.ServerTypes ( ServerMessage(..), ioServer )
+
 import Control.Concurrent ( forkIO )
 import TCP.Chan ( Input, Output, readInput, writeOutput, pipe )
 import Control.Monad ( forever, when )
@@ -46,12 +50,31 @@ client n inc outc = handle prefix
                            spaces++n++spaces,
                            replicate 40 '-',""]
 
+server :: Output (Message String MessageToClient)
+       -> Input (Message String (ServerMessage ResponseFromClient))
+       -> IO ()
+server o i = do Message player1 _ N <- readInput i
+                Message player2 _ N <- readInput i
+                (iplayer1, oplayer1) <- pipe
+                (iplayer2, oplayer2) <- pipe
+                forkIO $ forever $ readInput iplayer1 >>=
+                                      (writeOutput o . Message "server" player1)
+                (i2s, o2s) <- pipe
+                forkIO $ forever $ do Message _ _ (M m) <- readInput i
+                                      writeOutput o2s m
+                state <- start [(player1,oplayer1),(player2,oplayer2)] i2s
+                         [secretChamber,chapel,cellar,village,remodel,
+                          smithy,militia,thief,mine,market]
+                evalStateT play state >>= print
+
 main :: IO ()
 main =
     do args <- getArgs
        case args of
          [name,hostname] ->
              runClientTCP hostname 12345 $ ioClient $ client name
+         ["server"] ->
+             runServerTCP 12345 $ ioServer server
          _ -> do
           (c1i, c1o) <- pipe
           (c2i, c2o) <- pipe
