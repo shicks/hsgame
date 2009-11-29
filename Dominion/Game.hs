@@ -6,21 +6,21 @@ import Dominion.Question
 import Dominion.Stack
 
 import Control.Concurrent ( forkIO )
-import Control.Concurrent.Chan ( Chan, newChan, readChan, writeChan )
+import TCP.Chan ( Output, Input, pipe, readInput, writeOutput )
 import Control.Monad.State ( execStateT, modify, gets, liftIO )
 import Control.Monad ( replicateM, foldM, when, forever )
 
 newTurn :: TurnState
 newTurn = TurnState 1 1 0 cardPrice []
 
-start :: [(String,Chan MessageToClient)] -> Chan (QId,[Answer])
+start :: [(String,Output MessageToClient)] -> Input (QId,[Answer])
       -> [Card] -> IO GameState
 -- we should actually work in the Game monad for a bit here....
-start ps c cs = do ch <- newChan
-                   forkIO $ forever $ readChan c >>=
-                         writeChan ch . uncurry AnswerFromClient
-                   forkIO $ respond ch []
-                   execStateT `flip` emptyState ch $ do
+start ps c cs = do (chi,cho) <- pipe
+                   forkIO $ forever $ readInput c >>=
+                         writeOutput cho . uncurry AnswerFromClient
+                   forkIO $ respond chi []
+                   execStateT `flip` emptyState chi cho $ do
                      mapM_ fillDeck allPlayers
                      mapM_ (draw 5) allPlayers
                      fillSupplyN (10*(length ps-1)) curse
@@ -34,15 +34,16 @@ start ps c cs = do ch <- newChan
                           cs <- replicateM 7 (copyCard copper)
                           discard p *<<@ (es++cs)
           emptyPlayer (i,(s,c)) = PlayerState i s c [] [] [] [] [] []
-          emptyState ch = GameState (map emptyPlayer $ zip [0..] ps) []
-                          0 newTurn defaultGain ch [0..] [0..]
+          emptyState chi cho =
+              GameState (map emptyPlayer $ zip [0..] ps) []
+                            0 newTurn defaultGain chi cho [0..] [0..]
           fillSupplyN n c' = do card <- copyCard c'
                                 modify $ \s -> s { gameSupply =
                                                     (card,n):gameSupply s }
           vic = if length ps<3 then 8 else 12
           provs = if length ps<=4 then vic else 3*(length ps)
           fillSupply c' = fillSupplyN (if isVictory c' then vic else 10) c'
-          respond ch rs = do r <- readChan ch
+          respond ch rs = do r <- readInput ch
                              case r of
                                AnswerFromClient q as -> do
                                   u <- maybe (return False) ($as) $ lookup q rs

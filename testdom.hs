@@ -1,7 +1,7 @@
 import Dominion
 
 import Control.Concurrent ( forkIO )
-import Control.Concurrent.Chan ( Chan, readChan, writeChan, newChan )
+import TCP.Chan ( Input, Output, readInput, writeOutput, pipe )
 import Control.Monad ( forever, when )
 import Control.Monad.State ( evalStateT )
 import Data.IORef ( newIORef, readIORef, writeIORef )
@@ -9,13 +9,14 @@ import System.IO ( hFlush, stdout )
 
 import Debug.Trace ( trace )
 
-mux :: String -> Chan MessageToClient -> Chan (String,MessageToClient) -> IO ()
-mux name inc outc = forever $ readChan inc >>= writeChan outc . (,) name
+mux :: String -> Input MessageToClient
+    -> Output (String,MessageToClient) -> IO ()
+mux name inc outc = forever $ readInput inc >>= writeOutput outc . (,) name
 
-watch :: Chan (String,MessageToClient) -> Chan (QId,[Answer]) -> IO ()
+watch :: Input (String,MessageToClient) -> Output (QId,[Answer]) -> IO ()
 watch inc outc =
               do last <- newIORef ""
-                 forever $ do (n,q) <- readChan inc
+                 forever $ do (n,q) <- readInput inc
                               lastR <- readIORef last
                               when (n/=lastR) $ do
                                 putStrLn "\n\n\n"
@@ -40,7 +41,7 @@ watch inc outc =
                                     ans <- (ints (length as) . words)
                                            `fmap` getLine
                                     r <- mapM (\n -> as!!!(n-1)) ans
-                                    writeChan outc (i,r)
+                                    writeOutput outc (i,r)
     where spaces n = replicate ((40-length n)`div`2) ' '
           ints n [] = []
           ints n (s:ss) = case readsPrec 0 s of
@@ -50,14 +51,14 @@ watch inc outc =
           xs !!! n = if n >= length xs then putStrLn ("!!!: "++show n++" >= length "++show xs) >> return (head xs)
                      else return $ xs !! n
 
-main = do c1 <- newChan
-          c2 <- newChan
-          cmux <- newChan
-          cout <- newChan
-          forkIO $ mux "Alice" c1 cmux
-          forkIO $ mux "Bob" c2 cmux
-          forkIO $ watch cmux cout
-          state <- start [("Alice",c1),("Bob",c2)] cout
+main = do (c1i, c1o) <- pipe
+          (c2i, c2o) <- pipe
+          (cmuxi, cmuxo) <- pipe
+          (cout_i, cout_o) <- pipe
+          forkIO $ mux "Alice" c1i cmuxo
+          forkIO $ mux "Bob" c2i cmuxo
+          forkIO $ watch cmuxi cout_o
+          state <- start [("Alice",c1o),("Bob",c2o)] cout_i
                    [secretChamber,chapel,cellar,village,remodel,
                     smithy,militia,thief,mine,market]
           evalStateT play state >>= print

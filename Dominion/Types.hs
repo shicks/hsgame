@@ -9,7 +9,7 @@ module Dominion.Types ( GameState(..), PlayerState(..), Game,
                         Attack, Reaction,
                         QId, CId, PId(..) ) where
 
-import Control.Concurrent.Chan ( Chan, writeChan, readChan )
+import TCP.Chan ( Input, Output )
 import Control.Monad.State ( StateT, runStateT, gets, modify, liftIO )
 import Control.Monad ( when )
 
@@ -26,7 +26,8 @@ data GameState = GameState {
       currentTurn  :: PId,
       turnState    :: TurnState,
       hookGain     :: PId -> Card -> Game (),
-      inputChan    :: Chan MessageToServer,
+      inputChan    :: Input MessageToServer,
+      outputChan   :: Output MessageToServer,
       _qIds        :: [QId],  -- [QId 0..]
       _cIds        :: [CId]   -- [CId 0..]
     }
@@ -34,7 +35,7 @@ data GameState = GameState {
 data PlayerState = PlayerState {
       playerId        :: PId,
       playerName      :: String,
-      playerChan      :: Chan MessageToClient,
+      playerChan      :: Output MessageToClient,
       playerHand      :: [Card],
       playerDeck      :: [Card],
       playerDiscard   :: [Card],
