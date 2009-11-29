@@ -1,6 +1,9 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module Dominion.Types ( GameState(..), Game, Card(..), QId, CId ) where
+module Dominion.Types ( GameState(..), PlayerState(..), Game,
+                        MessageToServer(..), MessageToClient(..),
+                        Card(..), Answer(..), QuestionMessage(..),
+                        QId, CId, PId ) where
 
 import Control.Concurrent.Chan ( Chan, writeChan, readChan )
 import Control.Concurrent.MVar ( MVar, newEmptyMVar, takeMVar )
