@@ -50,9 +50,12 @@ client n inc outc = handle prefix
           ints n [] = []
           ints n (s:ss) = case readsPrec 0 s of
                             [(x,"")] | x <= n -> x:ints n ss
-                                     | otherwise -> trace ("rejecting "++show x) $ ints n ss
+                                     | otherwise -> trace ("rejecting "++show x)
+                                                    $ ints n ss
                             _ -> ints n ss
-          xs !!! n = if n >= length xs then putStrLn ("!!!: "++show n++" >= length "++show xs) >> return (head xs)
+          xs !!! n = if n >= length xs
+                     then do putStrLn ("!!!: "++show n++" >= length "++show xs)
+                             return (head xs)
                      else return $ xs !! n
           prefix = unlines["",replicate 40 '=',
                            spaces++n++spaces,
@@ -90,9 +93,12 @@ bot n inc outc = handle prefix
           ints n [] = []
           ints n (s:ss) = case readsPrec 0 s of
                             [(x,"")] | x <= n -> x:ints n ss
-                                     | otherwise -> trace ("rejecting "++show x) $ ints n ss
+                                     | otherwise -> trace ("rejecting "++show x)
+                                                    $ ints n ss
                             _ -> ints n ss
-          xs !!! n = if n >= length xs then putStrLn ("!!!: "++show n++" >= length "++show xs) >> return (head xs)
+          xs !!! n = if n >= length xs
+                     then do putStrLn ("!!!: "++show n++" >= length "++show xs)
+                             return (head xs)
                      else return $ xs !! n
           prefix = unlines["",replicate 40 '=',
                            spaces++n++spaces,
