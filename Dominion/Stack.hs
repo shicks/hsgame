@@ -3,7 +3,7 @@ module Dominion.Stack ( ) where
 import Dominion.Types
 import Dominion.Unique ( copyCard )
 
-import Data.Random ( randomRIO )
+import System.Random ( randomRIO )
 
 type ModifyS m a = (a -> a) -> m a
 

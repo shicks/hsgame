@@ -1,9 +1,12 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 module Dominion.Types ( ) where
 
 import Control.Concurrent.Chan ( Chan, writeChan, readChan )
 import Control.Concurrent.MVar ( MVar, newEmptyMVar, takeMVar )
+import Control.Monad.State ( StateT, runStateT, gets, modify, liftIO )
 
-type Game = StateT IO GameState
+type Game = StateT GameState IO
 
 -- startGame :: ... -> IO ()
 -- stateGame = do c <- newChan
@@ -15,10 +18,10 @@ data GameState = GameState {
       gameSupply   :: [(Card,Int)],
       currentTurn  :: PId,
       turnState    :: TurnState,
-      hookGain     :: Card -> PlayerId -> Game (),
+      hookGain     :: Card -> PId -> Game (),
       inputChan    :: Chan MessageToServer,
       _qIds        :: [QId],  -- [QId 0..]
-      _cIds        :: [CId],  -- [CId 0..]
+      _cIds        :: [CId]   -- [CId 0..]
     }
 
 data PlayerState = PlayerState {
@@ -29,14 +32,14 @@ data PlayerState = PlayerState {
       playerDeck     :: [Card],
       playerDiscard  :: [Card],
       playerDuration :: [Card],
-      playerMats     :: [(String,[Card])],
+      playerMats     :: [(String,[Card])]
     }
 
 data TurnState = TurnState {
       turnActions  :: Int,
       turnBuys     :: Int,
       turnCoins    :: Int,
-      turnPriceMod :: Card -> Int,
+      turnPriceMod :: Card -> Int
 }
 
 data Card = Card {
@@ -44,15 +47,29 @@ data Card = Card {
       cardName  :: String,
       cardText  :: String,
       cardType  :: [CardType],
-      cardPrice :: Int,
+      cardPrice :: Int
     }
+    deriving ( Eq, Show )
 
 data CardType
     = Action (Game ())
     | Victory
     | Treasure Int
-    | Reaction Reaction
-    | Score (Int -> Game -> Int)
+    | Score (Int -> GameState -> Int)
+  --  | Reaction Reaction
+
+instance Show CardType where
+    show (Action _) = "Action"
+    show Victory = "Victory"
+    show (Treasure n) = "Treasure "++show n
+    show (Score _) = "Score"
+
+instance Eq CardType where
+    Action _ == Action _ = True
+    Victory == Victory = True
+    Treasure _ == Treasure _ = True
+    Score _ == Score _ = True
+    _ == _ = False
 
 type PId = Int -- Player
 newtype QId = QId Int deriving ( Num, Eq, Ord, Enum, Show, Read ) -- Question
@@ -78,12 +95,13 @@ data QuestionMessage
 -- self :: Game PId
 -- self = gets currentTurn
 
-withTurn :: StateT IO TurnState a -> Game a
+withTurn :: StateT TurnState IO a -> Game a
 withTurn job = do s <- gets turnState
-                  (s',a) <- liftIO $ runStateT job s
+                  (a, s') <- liftIO $ runStateT job s
                   modify $ \ss -> ss { turnState = s' }
                   return a
 
+{-
 withPlayer :: Player p => p -> StateT IO PlayerState a -> Game a
 withPlayer n job = do n' <- toP n
                       p <- gets $ (!!n') . playerState
@@ -93,7 +111,7 @@ withPlayer n job = do n' <- toP n
     where mod _ _ [] = [] -- fail "withPlayer: invalid PId"?
           mod p' 0 (_:ss) = (p':ss)
           mod p' n (s:ss) = s:mod p' (n-1) ss
-
+-}
 
 
 -- class Player p where

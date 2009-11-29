@@ -16,6 +16,7 @@ main = build [] $ do -- autoVersion Numbered
                      executable "chat" "chat.hs" []
                      executable "purechat" "purechat.hs" []
                      executable "named-chat" "named-chat.hs" []
+                     executable "compile-test" "compile-test.hs" []
                      executable "lobby-chat" "lobby-chat.hs" []
                      executable "yamltest" "yamltest.hs" []
 
