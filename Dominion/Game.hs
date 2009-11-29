@@ -83,7 +83,7 @@ turn = do self <- gets currentTurn
           duration self
           actions self
           coins <- gets $ turnCoins . turnState
-          treasure <- (sum . map getTreasure) `fmap` hand self
+          treasure <- (sum . map getTreasure) `fmap` getStack (hand self)
           buys <- gets $ turnBuys . turnState
           gain <- gets hookGain
           supply <- gets gameSupply
@@ -93,7 +93,7 @@ turn = do self <- gets currentTurn
           -- next turn
           n <- gets $ length . gamePlayers
           modify $ \s -> s { currentTurn = (self+PId 1)`mod`(PId n) }
-    where actions self = do h <- hand self
+    where actions self = do h <- getStack $ hand self
                             a <- withTurn $ gets turnActions
                             tell self $ "Actions ("++show a++"): hand="++show h
                             let as = filter (isAction) h

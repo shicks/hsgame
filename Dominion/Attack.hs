@@ -17,7 +17,7 @@ attack name = do self <- getSelf
                  n <- gets $ length . gamePlayers
                  let opps = filter (/=self) $ map PId [0..n-1]
                  let react :: PId -> Game (Attack -> Attack)
-                     react p = do h <- hand p
+                     react p = do h <- getStack $ hand p
                                   let rs = filter isReaction h
                                   r <- askCards p rs (SelectReaction name)
                                        (0,1)
