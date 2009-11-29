@@ -1,15 +1,17 @@
 import Dominion
 
+import TCP.Client ( runClientTCP, ioClient )
 import Control.Concurrent ( forkIO )
 import TCP.Chan ( Input, Output, readInput, writeOutput, pipe )
 import Control.Monad ( forever, when )
 import Control.Monad.State ( evalStateT )
 import Data.IORef ( newIORef, readIORef, writeIORef )
 import System.IO ( hFlush, stdout )
+import System.Environment ( getArgs )
 
 import Debug.Trace ( trace )
 
-client :: String -> Input MessageToClient -> Output (QId,[Answer]) -> IO ()
+client :: String -> Input MessageToClient -> Output ResponseFromClient -> IO ()
 client n inc outc = handle prefix
     where handle msg = do q <- readInput inc
                           case q of
@@ -30,7 +32,7 @@ client n inc outc = handle prefix
                                    ans <- (ints (length as) . words)
                                           `fmap` getLine
                                    r <- mapM (\n -> as!!!(n-1)) ans
-                                   writeOutput outc (i,r)
+                                   writeOutput outc $ ResponseFromClient i r
                                    handle prefix
           spaces = replicate ((40-length n)`div`2) ' '
           ints n [] = []
@@ -45,7 +47,13 @@ client n inc outc = handle prefix
                            replicate 40 '-',""]
 
 main :: IO ()
-main = do (c1i, c1o) <- pipe
+main =
+    do args <- getArgs
+       case args of
+         [name,hostname] ->
+             runClientTCP hostname 12345 $ ioClient $ client name
+         _ -> do
+          (c1i, c1o) <- pipe
           (c2i, c2o) <- pipe
           (cout_i, cout_o) <- pipe
           forkIO $ client "Alice" c1i cout_o

@@ -13,14 +13,17 @@ import Control.Monad ( replicateM, foldM, when, forever )
 newTurn :: TurnState
 newTurn = TurnState 1 1 0 cardPrice []
 
-start :: [(String,Output MessageToClient)] -> Input (QId,[Answer])
+start :: [(String,Output MessageToClient)] -> Input ResponseFromClient
       -> [Card] -> IO GameState
 -- we should actually work in the Game monad for a bit here....
 start ps c cs = do (chi,cho) <- pipe
-                   forkIO $ forever $ readInput c >>=
-                         writeOutput cho . uncurry AnswerFromClient
+                   forkIO $ forever $ do ResponseFromClient q as <- readInput c
+                                         writeOutput cho (AnswerFromClient q as)
                    forkIO $ respond chi []
-                   execStateT `flip` emptyState chi cho $ do
+                   (registeri, registero) <- pipe
+                   forkIO $ forever $ do RQ a b <- readInput registeri
+                                         writeOutput cho (RegisterQuestion a b)
+                   execStateT `flip` emptyState chi registero $ do
                      mapM_ fillDeck allPlayers
                      mapM_ (draw 5) allPlayers
                      fillSupplyN (10*(length ps-1)) curse

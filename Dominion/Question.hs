@@ -17,7 +17,7 @@ ask1 p as q = do liftIO $ putStrLn $ "ask1: p="++show p
                    mv <- newEmptyMVar
                    let go = writeOutput och $
                             Question qid q as (1,1)
-                   writeOutput ich $ RegisterQuestion qid $ \as' ->
+                   writeOutput ich $ RQ qid $ \as' ->
                        case as' of
                          [a] | a `elem` as -> do putMVar mv a
                                                  return True   -- unhook
@@ -45,7 +45,7 @@ askCards p cs q (mn,mx) =
                           | length as < realMin = go >> return False
                           | test as cs [] = do putMVar mv (map unCard as)
                                                return True
-         writeOutput ich $ RegisterQuestion qid $ verify mv
+         writeOutput ich $ RQ qid $ verify mv
          go
          takeMVar mv
     where realMin = min mn $ length cs

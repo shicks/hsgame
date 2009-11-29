@@ -2,14 +2,15 @@
 
 module Dominion.Types ( GameState(..), PlayerState(..), Game,
                         withTurn, withPlayer, TurnState(..),
-                        MessageToServer(..), MessageToClient(..),
+                        MessageToServer(..), RegisterQuestionMessage(..),
+                        MessageToClient(..), ResponseFromClient(..),
                         Card(..), CardType(..), Answer(..),
                         QuestionMessage(..), InfoMessage(..),
                         newQId, newCId, copyCard, getSelf,
                         Attack, Reaction,
                         QId, CId, PId(..) ) where
 
-import TCP.Chan ( Input, Output )
+import TCP.Chan ( ShowRead, Input, Output )
 import Control.Monad.State ( StateT, runStateT, gets, modify, liftIO )
 import Control.Monad ( when )
 
@@ -27,7 +28,7 @@ data GameState = GameState {
       turnState    :: TurnState,
       hookGain     :: PId -> Card -> Game (),
       inputChan    :: Input MessageToServer,
-      outputChan   :: Output MessageToServer,
+      outputChan   :: Output RegisterQuestionMessage,
       _qIds        :: [QId],  -- [QId 0..]
       _cIds        :: [CId]   -- [CId 0..]
     }
@@ -62,7 +63,13 @@ data Card = Card {
 instance Eq Card where
     Card i _ _ _ _ == Card j _ _ _ _ = i==j
 instance Show Card where
-    show (Card id_ pr name text_ typ_) = '(':show pr++") "++name -- ++": "++text
+    show (Card id_ pr name text_ typ_) = show (pr,name)
+        -- '(':show pr++") "++name -- ++": "++text
+instance Read Card where
+    readsPrec _ x =
+        case reads x of
+          [((pr,n),b)] -> [(Card undefined pr n undefined undefined,b)]
+          _ -> []
 
 data CardType
     = Action (Game ())
@@ -99,18 +106,26 @@ newtype CId = CId Int deriving ( Num, Eq, Ord, Enum, Show, Read ) -- Card
 
 data MessageToClient = Info InfoMessage
                      | Question QId QuestionMessage [Answer] (Int,Int)
+                       deriving ( Show, Read )
+instance ShowRead MessageToClient
 data MessageToServer = AnswerFromClient QId [Answer]
                      | RegisterQuestion QId ([Answer] -> IO Bool)
+data RegisterQuestionMessage = RQ QId ([Answer] -> IO Bool)
 
-data Answer = PickCard Card | Choose String  deriving ( Eq, Show )
-data InfoMessage = InfoMessage String        deriving ( Show )
+data Answer = PickCard Card | Choose String  deriving ( Eq, Show, Read )
+
+data ResponseFromClient = ResponseFromClient QId [Answer]
+                          deriving ( Show, Read )
+instance ShowRead ResponseFromClient
+
+data InfoMessage = InfoMessage String        deriving ( Show, Read )
 data QuestionMessage
     = SelectAction | SelectReaction String           -- from hand
     | SelectSupply String | SelectBuy | SelectGain   -- from supply
     | DiscardBecause String | UndrawBecause String   -- maybe Card instead?
     | TrashBecause String
     | OtherQuestion String                           -- e.g. envoy?
-    deriving ( Show )
+    deriving ( Show, Read )
 
 
 
