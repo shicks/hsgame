@@ -37,8 +37,31 @@ plusBuy b = withTurn $ modify $ \s -> s { turnBuys = b + turnBuys s }
 plusCoin c = withTurn $ modify $ \s -> s { turnCoins = c + turnCoins s }
 plusCard c = getSelf >>= draw c
 
+-- deal with throne room later...!
+nextTurn :: Game () -> Game ()
+nextTurn later = do self <- getSelf
+                    withPlayer self $ modify $
+                                   \s -> s { durationEffects =
+                                             later:durationEffects s }
+
+duration :: Game () -> CardType
+duration act = Action $ \this -> do self <- getSelf
+                                    durations self *<<& ([this],played)
+                                    act
+
 dominion :: [Card]
-dominion = [chapel, cellar, feast]
+dominion = [chapel, cellar, feast, festival, laboratory, library,
+            market, militia, mine, moat, remodel, smithy, thief,
+            throneRoom, witch, woodcutter, workshop, village]
+
+promos :: [Card]
+promos = []
+
+intrigue :: [Card]
+intrigue = [harem, secretChamber]
+
+seaside :: [Card]
+seaside = [caravan]
 
 -- cards themselves
 chapel :: Card
@@ -208,18 +231,6 @@ secretChamber = Card 0 2 "Secret Chamber" "..." [Action act,Reaction react]
                      plusCoin $ length cs
 
 -- Seaside cards
-
--- deal with throne room later...!
-nextTurn :: Game () -> Game ()
-nextTurn later = do self <- getSelf
-                    withPlayer self $ modify $
-                                   \s -> s { durationEffects =
-                                             later:durationEffects s }
-
-duration :: Game () -> CardType
-duration act = Action $ \this -> do self <- getSelf
-                                    durations self *<<& ([this],played)
-                                    act
 
 caravan :: Card
 caravan = Card 0 4 "Caravan" "..." [duration a]
