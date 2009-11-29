@@ -1,4 +1,3 @@
-||| add lobby-chat which supports tables. >>>
 import TCP.Server ( runServerTCP )
 import TCP.ServerTypes ( ioServer, ServerMessage(M,N) )
 import TCP.Message ( Message(Message) )
@@ -20,14 +19,3 @@ main = runServerTCP 12345 $  ioServer handle
                    Message x _ (M s) ->
                        writeOutput fromRoomW (Message "server" x $
                                               "I don't care about "++s)
-
-
-<<< add lobby-chat which supports tables. |||
-||| reorganize actions in Game.hs >>>
-import TCP.Server ( startServer )
-import Control.Monad ( forever )
-import System.IO ( hPutStrLn )
-
-main = startServer 12345 $ \n h -> forever $ hPutStrLn h $ "hello " ++ n
-
-<<< reorganize actions in Game.hs |||
