@@ -1,34 +1,3 @@
-||| Merge >>>
-import TCP.Router ( RouterMessage(M,N), ioRouter, connectRouter )
-import TCP.Server ( startRouter )
-import TCP.Message ( Message(..) )
-import TCP.Chan ( readInput, writeOutput )
-import NameServer ( nameServer )
-
-main :: IO ()
-main = startRouter 12345 $
-       connectRouter (nameServer "server" "server") $ ioRouter $
-       \fromroomW intoroomR ->
-          do let send x m y = writeOutput fromroomW (Message x y m)
-                 handleRoom xs =
-                  do m <- readInput intoroomR
-                     case m of
-                       Message x _ N ->
-                           do send "server" ("Welcome, "++x) x
-                              mapM_ (send "server"
-                                     ("Welcome "++x++" everyone!")) xs
-                              handleRoom (x:xs)
-                       Message f t (M s) ->
-                           if t == "server"
-                           then do mapM_ (send f (f++" says: "++s))
-                                             (filter (/= f) $ xs)
-                                   handleRoom xs
-                           else do send f (f++" privately says: "++s) t
-                                   handleRoom xs
-             handleRoom []
-
-<<< Merge |||
-||| Merge stupidly? >>>
 module Main ( main ) where
 
 import System.Environment ( getArgs )
@@ -41,6 +10,7 @@ import TCP.Client ( runClientTCP, ioClient, modifyClient )
 import TCP.Message ( Message(..) )
 import TCP.Chan ( readInput, writeOutput )
 import NamePicker ( pickNames, namedClient )
+import Lobby ( lobby, lobbyClient )
 
 main :: IO ()
 main = do args <- getArgs
@@ -51,7 +21,7 @@ main = do args <- getArgs
 
 client :: String -> IO ()
 client host = runClientTCP host 12345 $ modifyClient namedClient $
-              ioClient $ \i o ->
+              lobbyClient "tablename is String" $ ioClient $ \i o ->
               do x <- readInput i
                  putStrLn x
                  forkIO $ forever $ getLine >>= writeOutput o
@@ -59,7 +29,8 @@ client host = runClientTCP host 12345 $ modifyClient namedClient $
 
 serve :: IO ()
 serve =
-    runServerTCP 12345 $ modifyServer (pickNames "server" "server") $ ioServer $
+    runServerTCP 12345 $ modifyServer (pickNames "server" "server") $
+                 lobby "tabletype is String" $ ioServer $
        \fromroomW intoroomR ->
           do let send x m y = writeOutput fromroomW (Message x y m)
                  handleRoom xs =
@@ -78,5 +49,3 @@ serve =
                            else do send f (f++" privately says: "++s) t
                                    handleRoom xs
              handleRoom []
-
-<<< Merge stupidly? |||

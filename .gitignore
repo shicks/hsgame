@@ -1,3 +1,4 @@
+||| Merge >>>
 old
 *~
 *.[oa]
@@ -19,3 +20,31 @@ chat
 purechat
 named-chat
 yamltest
+
+<<< Merge |||
+||| Merge stupidly? >>>
+old
+*~
+*.[oa]
+*.hi
+config.d
+*.depend
+*.log
+.package.conf
+.package.conf.old
+.yaml-simple
+dist
+*.cfg
+*.config
+yell
+echo
+testyaml
+telnet
+chat
+purechat
+named-chat
+yamltest
+lobby-chat
+testdom
+
+<<< Merge stupidly? |||
