@@ -32,7 +32,8 @@ client n inc outc = handle prefix
                                    putStrLn "Options:"
                                    let pretty (Choose s) = s
                                        pretty (PickCard c) = cname c++
-                                           " ("++show (cprice c)++")"
+                                           " ("++show (cprice c)++") ["++
+                                               show (cid c)++"]"
                                    mapM_ (\(n,a) -> putStrLn $ "  " ++ show n
                                                     ++ ": " ++ pretty a) $
                                                     zip [1..] as
