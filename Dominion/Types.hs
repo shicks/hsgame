@@ -189,6 +189,9 @@ right :: PId -> Game PId
 right p = do n <- gets $ length . gamePlayers
              return $ (p+PId n-PId 1) `mod` PId n
 
+fromPId :: PId -> Game PlayerState
+fromPId p = withPlayer p $ gets id
+
 -- class Player p where
 --     toP :: p -> Game PId
 -- instance Player (Game PId) where toP = id

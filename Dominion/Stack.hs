@@ -4,7 +4,7 @@ module Dominion.Stack ( Stack, (*<<), (.<<), (*<<&), (.<<&), (*<<@), (.<<@),
                         getStack, top, bottom, trash,
                         (.<<.), (.<<*), (*<<.), (*<<*), (.<<<), (*<<<),
                         draw, hand, deck, discard, mat, durations, played,
-                        remove, defaultGain ) where
+                        remove, defaultGain, allCards ) where
 
 import Dominion.Types
 import Dominion.Question
@@ -146,6 +146,10 @@ mat c = \p ->
           modifys c f ((c',x):ys) | c'==c     = (c',f x):ys
                                   | otherwise = (c',x):modifys c f ys
 
+mats :: PId -> Game [(String,Stack)]
+mats p = map (\m -> (m,mat m p)) `fmap`
+         (withPlayer p $ gets $ map fst . playerMats)
+
 durations :: PId -> Stack
 durations = \p ->
             Stack ("durations "++show p)
@@ -164,6 +168,8 @@ remove cs s = mapM_ (\c -> mod s (rem c)) cs
     where rem c [] = []
           rem c (c':cs) | cardId c==cardId c' = cs
                         | otherwise = c':rem c cs
+
+
 
 -- *this is just a silly synonym for remove
 trash :: Card -> Stack -> Game ()
@@ -190,3 +196,14 @@ defaultGain p c = do modify $ \s -> s { gameSupply = f (gameSupply s) }
     where f [] = []
           f ((c',i):cs) | cardName c' == cardName c = (c',i-1):cs
                         | otherwise = (c',i):f cs
+
+allCards :: PId -> Game [Card]
+allCards p = withPlayer p $ do
+               p' <- gets id
+               return $ playerHand p' ++ playerDeck p' ++ playerDiscard p'
+                        ++ playerDuration p' ++ concatMap snd (playerMats p')
+
+-- allCards :: PId -> Game [Card]
+-- allCards p = do xs <- mapM (\s -> get $ s p) [deck, hand, discard, durations]
+--                 ys <- mapM (\s -> get $ snd s) =<< mats p
+--                 return $ concat xs++concat ys

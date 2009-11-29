@@ -70,15 +70,14 @@ play = do winner <- endGame
                            prov = map snd $ filter (isProvince.fst) sup
                            over = length empty >= piles || head prov <= 0
                        if not over then return Nothing else do
-                       ps <- gets gamePlayers
-                       (Just . zip (map playerName ps))
-                           `fmap` mapM playerScore ps
-          playerScore :: PlayerState -> Game Int
-          playerScore p = foldM (flip ($)) 0 $
-                          concatMap (getScores . cardType) $ allCards p
+                       let ps = map fromIntegral [0..np-1]
+                       names <- mapM (\p -> withPlayer p $ gets playerName) ps
+                       (Just . zip names) `fmap` mapM playerScore ps
+          playerScore :: PId -> Game Int
+          playerScore p = do cs <- allCards p
+                             foldM (flip ($)) 0 $
+                                   concatMap (getScores . cardType) cs
           isProvince = (=="Province") . cardName
-          allCards p = playerHand p ++ playerDeck p ++ playerDiscard p
-                       ++ playerDuration p ++ concatMap snd (playerMats p)
           getScores [] = []
           getScores (Score f:xs) = f:getScores xs
           getScores (_:xs) = getScores xs
