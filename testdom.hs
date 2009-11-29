@@ -17,7 +17,10 @@ import Debug.Trace ( trace )
 
 client :: String -> Input MessageToClient -> Output ResponseFromClient -> IO ()
 client n inc outc = handle prefix
-    where handle msg = do q <- readInput inc
+    where handle msg = do putStrLn "waiting on input from server..."
+                          q <- readInput inc
+                          putStrLn "got input from server."
+                          putStrLn $ show q
                           case q of
                             Info m -> case m of
                                         InfoMessage s -> handle (msg++s++"\n")
@@ -59,6 +62,8 @@ server o i = do Message player1 _ N <- readInput i
                 (iplayer2, oplayer2) <- pipe
                 forkIO $ forever $ readInput iplayer1 >>=
                                       (writeOutput o . Message "server" player1)
+                forkIO $ forever $ readInput iplayer2 >>=
+                                      (writeOutput o . Message "server" player2)
                 (i2s, o2s) <- pipe
                 forkIO $ forever $ do Message _ _ (M m) <- readInput i
                                       writeOutput o2s m

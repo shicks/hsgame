@@ -5,6 +5,7 @@ import Dominion.Types
 import TCP.Chan ( writeOutput )
 import Control.Concurrent.MVar ( newEmptyMVar, takeMVar, putMVar )
 import Control.Monad.State ( gets, liftIO )
+import Data.Maybe ( catMaybes )
 
 -- *simple question with list of answers: choose 1
 ask1 :: PId -> [Answer] -> QuestionMessage -> Game Answer
@@ -40,19 +41,20 @@ askCards p cs q (mn,mx) =
        liftIO $ do
          mv <- newEmptyMVar
          let go = writeOutput och $
-                  Question qid q (map PickCard cs) (realMin,realMax)
+                  Question qid q (map pickCard cs) (realMin,realMax)
              verify mv as | length as > realMax = go >> return False
                           | length as < realMin = go >> return False
-                          | test as cs [] = do putMVar mv (map unCard as)
-                                               return True
+                          | test as cs = do putMVar mv $ catMaybes $
+                                             map ((`lookupCard` cs) . unCard) as
+                                            return True
          writeOutput ich $ RQ qid $ verify mv
          go
          takeMVar mv
     where realMin = min mn $ length cs
           realMax = min mx $ length cs
-          test [] _ _ = True -- as is subset of cs (unordered)
-          test (PickCard c:as) (x:xs) ys
-              | cardId c==cardId x = test as (xs++ys) []
-              | otherwise = test (PickCard c:as) xs (x:ys)
-          test _ _ _ = False
+          test [] _ = True -- as is subset of cs (unordered)
+          test (PickCard cd:as) cs =
+              case lookupCard cd cs of
+                Just c -> test as (filter (/= c) cs)
+                Nothing -> False
           unCard a = case a of { PickCard c -> c; _ -> error "impossible" }

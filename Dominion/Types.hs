@@ -4,7 +4,9 @@ module Dominion.Types ( GameState(..), PlayerState(..), Game,
                         withTurn, withPlayer, TurnState(..),
                         MessageToServer(..), RegisterQuestionMessage(..),
                         MessageToClient(..), ResponseFromClient(..),
-                        Card(..), CardType(..), Answer(..),
+                        Card(..), CardType(..),
+                        Answer(..), pickCard,
+                        CardDescription(..), describeCard, lookupCard,
                         QuestionMessage(..), InfoMessage(..),
                         newQId, newCId, copyCard, getSelf,
                         Attack, Reaction,
@@ -65,11 +67,20 @@ instance Eq Card where
 instance Show Card where
     show (Card id_ pr name text_ typ_) = show (pr,name)
         -- '(':show pr++") "++name -- ++": "++text
-instance Read Card where
-    readsPrec _ x =
-        case reads x of
-          [((pr,n),b)] -> [(Card undefined pr n undefined undefined,b)]
-          _ -> []
+data CardDescription =
+ CardDescription { cid :: CId, cprice :: Int, cname :: String, ctext :: String }
+                 deriving ( Eq, Show, Read )
+instance ShowRead CardDescription
+
+describeCard :: Card -> CardDescription
+describeCard (Card a b c d _) = CardDescription a b c d
+
+pickCard :: Card -> Answer
+pickCard = PickCard . describeCard
+
+lookupCard :: CardDescription -> [Card] -> Maybe Card
+lookupCard d cs = do c:_ <- Just $ filter ((== cid d) . cardId) cs
+                     Just c
 
 data CardType
     = Action (Game ())
@@ -112,7 +123,8 @@ data MessageToServer = AnswerFromClient QId [Answer]
                      | RegisterQuestion QId ([Answer] -> IO Bool)
 data RegisterQuestionMessage = RQ QId ([Answer] -> IO Bool)
 
-data Answer = PickCard Card | Choose String  deriving ( Eq, Show, Read )
+data Answer = PickCard CardDescription
+            | Choose String  deriving ( Eq, Show, Read )
 
 data ResponseFromClient = ResponseFromClient QId [Answer]
                           deriving ( Show, Read )
