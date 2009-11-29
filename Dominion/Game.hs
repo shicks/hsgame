@@ -64,19 +64,20 @@ play = do winner <- endGame
             Just s -> return s
             Nothing -> turn >> play
     where endGame = do sup <- gets gameSupply
-                       let empty = filter ((<=0).snd) sup
+                       np <- gets $ length . gamePlayers
+                       let piles = if np>4 then 4 else 3
+                           empty = filter ((<=0).snd) sup
                            prov = map snd $ filter (isProvince.fst) sup
-                           over = length empty >= 3 || head prov <= 0
+                           over = length empty >= piles || head prov <= 0
                        if not over then return Nothing else do
-                       ps <- gets gamePlayers
-                       (Just . zip (map playerName ps))
-                           `fmap` mapM playerScore ps
-          playerScore :: PlayerState -> Game Int
-          playerScore p = foldM (flip ($)) 0 $
-                          concatMap (getScores . cardType) $ allCards p
+                       let ps = map fromIntegral [0..np-1]
+                       names <- mapM (\p -> withPlayer p $ gets playerName) ps
+                       (Just . zip names) `fmap` mapM playerScore ps
+          playerScore :: PId -> Game Int
+          playerScore p = do cs <- allCards p
+                             foldM (flip ($)) 0 $
+                                   concatMap (getScores . cardType) cs
           isProvince = (=="Province") . cardName
-          allCards p = playerHand p ++ playerDeck p ++ playerDiscard p
-                       ++ playerDuration p ++ concatMap snd (playerMats p)
           getScores [] = []
           getScores (Score f:xs) = f:getScores xs
           getScores (_:xs) = getScores xs
@@ -87,7 +88,7 @@ turn = do self <- gets currentTurn
           duration self
           actions self
           coins <- gets $ turnCoins . turnState
-          treasure <- (sum . map getTreasure) `fmap` hand self
+          treasure <- (sum . map getTreasure) `fmap` getStack (hand self)
           buys <- gets $ turnBuys . turnState
           gain <- gets hookGain
           supply <- gets gameSupply
@@ -97,7 +98,7 @@ turn = do self <- gets currentTurn
           -- next turn
           n <- gets $ length . gamePlayers
           modify $ \s -> s { currentTurn = (self+PId 1)`mod`(PId n) }
-    where actions self = do h <- hand self
+    where actions self = do h <- getStack $ hand self
                             a <- withTurn $ gets turnActions
                             tell self $ "Actions ("++show a++"): hand="++show h
                             let as = filter (isAction) h

@@ -15,7 +15,7 @@ import Control.Monad.Trans ( liftIO ) -- for debugging!
 
 getSHGP :: Game (PId, [Card], PId -> Card -> Game (), Card -> Int) 
 getSHGP = do self <- gets currentTurn
-             h <- hand self
+             h <- getStack $ hand self
              gain <- gets hookGain
              price <- withTurn $ gets turnPriceMod
              return (self,h,gain,price)
@@ -54,7 +54,7 @@ cellar = Card 0 2 "Cellar" "..." [Action a]
 library :: Card
 library = Card 0 5 "Library" "..." [Action a]
     where a = do self <- getSelf
-                 let drw = do h <- hand self :: Game [Card]
+                 let drw = do h <- getStack $ hand self
                               if length h >= 7 then return () else do
                               mc <- top $ deck self
                               case mc of
@@ -81,7 +81,7 @@ militia :: Card
 militia = Card 0 4 "Militia" "..." [Action a]
     where a = do plusCoin 2
                  attackNow "Militia" $ \_ opp -> do
-                   h <- hand opp
+                   h <- getStack $ hand opp
                    let n = length h
                    when (n>3) $ do
                      cs <- askCards opp h (DiscardBecause "militia") (n-3,n-3)
@@ -170,7 +170,7 @@ harem = Card 0 6 "Harem" "2 Treasure, 2VP" [Victory, Treasure 2,
 secretChamber :: Card
 secretChamber = Card 0 2 "Secret Chamber" "..." [Action act,Reaction react]
     where react self cont = do draw 2 self
-                               h <- hand self
+                               h <- getStack $ hand self
                                cs <- askCards self h
                                      (UndrawBecause "secret chamber") (2,2)
                                deck self *<<& (cs,hand self)
