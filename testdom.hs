@@ -114,7 +114,7 @@ server o i = do Message player1 _ N <- readInput i
                                       writeOutput o2s m
                 state <- start [(player1,oplayer1),(player2,oplayer2)] i2s
                          [secretChamber,chapel,cellar,village,remodel,
-                          smithy,militia,thief,mine,market]
+                          smithy,militia,caravan,mine,market]
                 evalStateT play state >>= print
 
 main :: IO ()
@@ -135,5 +135,5 @@ main =
           forkIO $ client "Bob" c2i cout_o
           state <- start [("Alice",c1o),("Bob",c2o)] cout_i
                    [secretChamber,chapel,cellar,village,remodel,
-                    smithy,militia,thief,mine,market]
+                    smithy,militia,caravan,mine,market]
           evalStateT play state >>= print

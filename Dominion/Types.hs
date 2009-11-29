@@ -83,7 +83,7 @@ lookupCard d cs = do c:_ <- Just $ filter ((== cid d) . cardId) cs
                      Just c
 
 data CardType
-    = Action (Game ())
+    = Action (Card -> Game ())
     | Victory
     | Treasure Int
     | Reaction Reaction

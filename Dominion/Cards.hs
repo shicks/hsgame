@@ -31,137 +31,163 @@ supplyCosting f = do price <- withTurn $ gets turnPriceMod
                      return $ concat [if n>0 && f (price c)
                                       then [c] else [] | (c,n) <- sup]
 
-plusAction, plusBuy, plusCoin :: Int -> Game ()
+plusAction, plusBuy, plusCoin, plusCard :: Int -> Game ()
 plusAction a = withTurn $ modify $ \s -> s { turnActions = a + turnActions s }
 plusBuy b = withTurn $ modify $ \s -> s { turnBuys = b + turnBuys s }
 plusCoin c = withTurn $ modify $ \s -> s { turnCoins = c + turnCoins s }
+plusCard c = getSelf >>= draw c
+
+dominion :: [Card]
+dominion = [chapel, cellar, feast]
 
 -- cards themselves
 chapel :: Card
 chapel = Card 0 2 "Chapel" "Trash up to 4 cards from your hand" [Action a]
-    where a = do (self,h,_,_) <- getSHGP
-                 cs <- askCards self h (TrashBecause "chapel") (0,4)
-                 mapM_ (flip trash $ hand self) cs
+    where a _ = do (self,h,_,_) <- getSHGP
+                   cs <- askCards self h (TrashBecause "chapel") (0,4)
+                   mapM_ (flip trash $ hand self) cs
 
 cellar :: Card
 cellar = Card 0 2 "Cellar" "..." [Action a]
-    where a = do (self,h,_,_) <- getSHGP
-                 plusAction 1
-                 cs <- askCards self h (DiscardBecause "cellar") (0,length h)
-                 discard self *<<& (cs,hand self)
-                 draw (length cs) self
+    where a _ = do (self,h,_,_) <- getSHGP
+                   plusAction 1
+                   cs <- askCards self h (DiscardBecause "cellar") (0,length h)
+                   discard self *<<& (cs,hand self)
+                   draw (length cs) self
+
+feast :: Card
+feast = Card 0 4 "Feast" "Trash this card.  Gain a card costing up to 5"
+        [Action a]
+    where a this = do (self,_,gain,_) <- getSHGP
+                      trash this $ played
+                      sup <- supplyCosting (<=5)
+                      cs <- askCards self sup SelectGain (1,1)
+                      case cs of [c] -> gain self c
+                                 _ -> return ()
+
+festival :: Card
+festival = Card 0 5 "Festival" "..." $
+          [Action $ \_ -> plusBuy 1 >> plusCoin 2 >> plusAction 2]
+
+laboratory :: Card
+laboratory = Card 0 5 "Laboratory" "..." $
+          [Action $ \_ -> (getSelf >>= draw 2) >> plusAction 1]
 
 library :: Card
 library = Card 0 5 "Library" "..." [Action a]
-    where a = do self <- getSelf
-                 let drw = do h <- getStack $ hand self
-                              if length h >= 7 then return () else do
-                              mc <- top $ deck self
-                              case mc of
-                                Nothing -> return ()
-                                Just c
-                                    | isAction c -> do
-                                       resp <- askKeep c
-                                       case resp of
-                                         Choose "Yes" -> hand self *<< c
-                                         _ -> discard self *<< c
-                                    | otherwise -> do
-                                        hand self *<< c
-                                        tell self $ "Drew "++show c
-                              drw
-                     askKeep c = ask1 self [Choose "Yes",Choose "No"] $
-                                 OtherQuestion $ "Keep "++show c++"?"
-                 drw
-
-moat :: Card
-moat = Card 0 2 "Moat" "..." [Action $ getSelf >>= draw 2,Reaction r]
-    where r _ _ = return $ \_ _ _ -> return ()
-
-militia :: Card
-militia = Card 0 4 "Militia" "..." [Action a]
-    where a = do plusCoin 2
-                 attackNow "Militia" $ \_ opp -> do
-                   h <- getStack $ hand opp
-                   let n = length h
-                   when (n>3) $ do
-                     cs <- askCards opp h (DiscardBecause "militia") (n-3,n-3)
-                     discard opp *<<& (cs,hand opp)
-
-village :: Card
-village = Card 0 3 "Village" "..." $
-          [Action $ (getSelf >>= draw 1) >> plusAction 2]
-
-workshop :: Card
-workshop = Card 0 3 "Workshop" "..." [Action a]
-    where a = do (self,_,gain,_) <- getSHGP
-                 sup <- supplyCosting (<=4)
-                 cs <- askCards self sup SelectGain (1,1)
-                 mapM_ (gain self) cs
-                 -- pickFromSupply self aff SelectGain $ self . gain
-
-woodcutter :: Card
-woodcutter = Card 0 3 "Woodcutter" "..." [Action $ plusCoin 2 >> plusBuy 1]
-
--- now :: m (a -> b) -> a -> m b
--- now f a = f >>= ($a)
-
-remodel :: Card
-remodel = Card 0 4 "Remodel" "..." [Action a]
-    where a = do (self,h,gain,price) <- getSHGP
-                 cs <- askCards self h (TrashBecause "remodel") (1,1)
-                 if null cs then return () else do
-                 let c = head cs
-                 trash c $ hand self
-                 sup <- supplyCosting (<=(price c+2))
-                 cs' <- askCards self sup SelectGain (1,1)
-                 if null cs' then return () else gain self $ head cs'
-
-smithy :: Card
-smithy = Card 0 4 "Smithy" "..." [Action $ getSelf >>= draw 3]
+    where a _ = do self <- getSelf
+                   let drw = do h <- getStack $ hand self
+                                if length h >= 7 then return () else do
+                                mc <- top $ deck self
+                                case mc of
+                                  Nothing -> return ()
+                                  Just c
+                                      | isAction c -> do
+                                         resp <- askKeep c
+                                         case resp of
+                                           Choose "Yes" -> hand self *<< c
+                                           _ -> discard self *<< c
+                                      | otherwise -> do
+                                          hand self *<< c
+                                          tell self $ "Drew "++show c
+                                drw
+                       askKeep c = ask1 self [Choose "Yes",Choose "No"] $
+                                   OtherQuestion $ "Keep "++show c++"?"
+                   drw
 
 market :: Card
 market = Card 0 5 "Market" "..." [Action a]
-    where a = plusAction 1 >> plusBuy 1 >> (getSelf >>= draw 1) >> plusCoin 1
+    where a _ = plusAction 1 >> plusBuy 1 >> (getSelf >>= draw 1) >> plusCoin 1
+
+militia :: Card
+militia = Card 0 4 "Militia" "..." [Action a]
+    where a _ = do plusCoin 2
+                   attackNow "Militia" $ \_ opp -> do
+                     h <- getStack $ hand opp
+                     let n = length h
+                     when (n>3) $ do
+                       cs <- askCards opp h (DiscardBecause "militia") (n-3,n-3)
+                       discard opp *<<& (cs,hand opp)
 
 mine :: Card
 mine = Card 0 5 "Mine" "..." [Action a]
-    where a = do (self,h,gain,price) <- getSHGP
-                 cs <- askCards self (filter isTreasure h) (TrashBecause "mine")
-                       (1,1)
-                 if null cs then return () else do
-                 let c = head cs
-                 trash c $ hand self
-                 sup <- filter isTreasure `fmap` supplyCosting (<=(price c+3))
-                 cs' <- askCards self sup SelectGain (1,1)
-                 if null cs' then return () else do gain self $ head cs'
-                                                    hand self *<<* discard self
+    where a _ = do (self,h,gain,price) <- getSHGP
+                   cs <- askCards self (filter isTreasure h)
+                         (TrashBecause "mine") (1,1)
+                   if null cs then return () else do
+                   let c = head cs
+                   trash c $ hand self
+                   sup <- filter isTreasure `fmap` supplyCosting (<=(price c+3))
+                   cs' <- askCards self sup SelectGain (1,1)
+                   if null cs' then return () else do gain self $ head cs'
+                                                      hand self *<<* discard self
+
+moat :: Card
+moat = Card 0 2 "Moat" "..." [Action $ \_ -> getSelf >>= draw 2,Reaction r]
+    where r _ _ = return $ \_ _ _ -> return ()
+
+remodel :: Card
+remodel = Card 0 4 "Remodel" "..." [Action a]
+    where a _ = do (self,h,gain,price) <- getSHGP
+                   cs <- askCards self h (TrashBecause "remodel") (1,1)
+                   if null cs then return () else do
+                   let c = head cs
+                   trash c $ hand self
+                   sup <- supplyCosting (<=(price c+2))
+                   cs' <- askCards self sup SelectGain (1,1)
+                   if null cs' then return () else gain self $ head cs'
+
+smithy :: Card
+smithy = Card 0 4 "Smithy" "..." [Action $ \_ -> getSelf >>= draw 3]
 
 thief :: Card
 thief = Card 0 4 "Thief" "..." [Action a]
-    where a = attackNow "thief" $ \self opp -> do
-                cs <- catMaybes `fmap` replicateM 2 (top $ deck opp)
-                let treas = filter isTreasure cs
-                tc <- askCards self treas (TrashBecause "thief") (1,1)
-                discard opp *<<@ filter (not . (`elem`tc)) cs
-                case tc of
-                  [c] -> do g <- ask1 self [Choose "Yes", Choose "No"] $
-                                 OtherQuestion $ "Keep "++show c++"?"
-                            discard self *<< c
-                  _ -> return ()
+    where a _ = attackNow "thief" $ \self opp -> do
+                  cs <- catMaybes `fmap` replicateM 2 (top $ deck opp)
+                  let treas = filter isTreasure cs
+                  tc <- askCards self treas (TrashBecause "thief") (1,1)
+                  discard opp *<<@ filter (not . (`elem`tc)) cs
+                  case tc of
+                    [c] -> do g <- ask1 self [Choose "Yes", Choose "No"] $
+                                   OtherQuestion $ "Keep "++show c++"?"
+                              discard self *<< c
+                    _ -> return ()
 
--- thiefAttack :: Game ()
--- thiefAttack = do opp <- attack "thief"
---                  opp $ \attacker defender -> do
---                    cs <- defender $ draw 2
---                    cs' <- concat `fmap` mapM (\c -> if isTreasure c then return [c] else defender (gain c) >> return []) cs
---                    unless (null cs') $ do
---                      [tc] <- attacker $ askCards cs' (TrashBecause "thief") (1,1)
---                      gain <- attacker $ ask $ ThiefGain [True,False]
---                      when gain $ attacker $ gain tc
---                      -- defender gains otherwise...
+throneRoom :: Card
+throneRoom = Card 0 4 "Throne Room" "..." [Action a]
+    where a _ = do (self,h,_,_) <- getSHGP
+                   let as = filter isAction h
+                   cs <- askCards self as SelectAction (1,1)
+                   case cs of [c] -> do played *<<& (cs,hand self)
+                                        getAction c
+                                        getAction c
+                              _ -> return ()
+
+          -- There are some subtleties with durations here, but we'll worry
+          -- about that later...
+
+witch :: Card
+witch = Card 0 5 "Witch" "..." [Action a]
+    where a _ = do getSelf >>= draw 2
+                   attackNow "witch" $ \_ opp -> do gain <- gets hookGain
+                                                    gain opp curse
+
+woodcutter :: Card
+woodcutter = Card 0 3 "Woodcutter" "..." [Action $ \_ -> plusCoin 2 >> plusBuy 1]
+
+workshop :: Card
+workshop = Card 0 3 "Workshop" "..." [Action a]
+    where a _ = do (self,_,gain,_) <- getSHGP
+                   sup <- supplyCosting (<=4)
+                   cs <- askCards self sup SelectGain (1,1)
+                   mapM_ (gain self) cs
+
+village :: Card
+village = Card 0 3 "Village" "..." $
+          [Action $ \_ -> (getSelf >>= draw 1) >> plusAction 2]
 
 
-
+-- *Intrigue
 
 harem :: Card
 harem = Card 0 6 "Harem" "2 Treasure, 2VP" [Victory, Treasure 2,
@@ -175,12 +201,30 @@ secretChamber = Card 0 2 "Secret Chamber" "..." [Action act,Reaction react]
                                      (UndrawBecause "secret chamber") (2,2)
                                deck self *<<& (cs,hand self)
                                cont
-          act = do (self,h,_,_) <- getSHGP
-                   cs <- askCards self h (DiscardBecause "secret chamber")
-                         (0,length h)
-                   discard self *<<& (cs,hand self)
-                   plusCoin $ length cs
+          act _ = do (self,h,_,_) <- getSHGP
+                     cs <- askCards self h (DiscardBecause "secret chamber")
+                           (0,length h)
+                     discard self *<<& (cs,hand self)
+                     plusCoin $ length cs
 
+-- Seaside cards
+
+-- deal with throne room later...!
+nextTurn :: Game () -> Game ()
+nextTurn later = do self <- getSelf
+                    withPlayer self $ modify $
+                                   \s -> s { durationEffects =
+                                             later:durationEffects s }
+
+duration :: Game () -> CardType
+duration act = Action $ \this -> do self <- getSelf
+                                    durations self *<<& ([this],played)
+                                    act
+
+caravan :: Card
+caravan = Card 0 4 "Caravan" "..." [duration a]
+    where a = do plusAction 1 >> plusCard 1
+                 nextTurn $ plusCard 1
 
 -- Basic cards
 
@@ -221,7 +265,7 @@ isAction :: Card -> Bool
 isAction c = not $ null [() | Action _ <- cardType c]
 
 getAction :: Card -> Game ()
-getAction c = foldl (>>) (return ()) [a | Action a <- cardType c]
+getAction c = foldl (>>) (return ()) [a c | Action a <- cardType c]
 
 
 
