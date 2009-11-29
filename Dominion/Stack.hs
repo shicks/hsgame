@@ -1,11 +1,20 @@
-module Dominion.Stack ( ) where
+{-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
+
+module Dominion.Stack ( Stack, (*<<), (.<<), (*<<&), (.<<&), (*<<@), (.<<@),
+                        top, bottom, trash,
+                        (.<<.), (.<<*), (*<<.), (*<<*), (.<<<), (*<<<),
+                        draw, hand, deck, discard, mat, durations, played,
+                        remove, defaultGain ) where
 
 import Dominion.Types
-import Dominion.Unique ( copyCard )
+import Dominion.Question
 
+import Control.Monad ( replicateM_ )
+import Control.Monad.State ( gets, modify )
+import Control.Monad.Trans ( liftIO )
 import System.Random ( randomRIO )
 
-type ModifyS m a = (a -> a) -> m a
+type ModifyS m a = (a -> a) -> m ()
 
 class Stack s where
     mkStack :: String -> ModifyS Game [Card] -> Game [Card] -> s
@@ -16,103 +25,160 @@ instance Stack (ModifyS Game [Card]) where
 instance Stack String where
     mkStack s _ _ = s
 
+type StackRW = (Game [Card], ModifyS Game [Card])
+instance Stack StackRW where
+    mkStack _ m g = (g,m)
+
 -- fromTop :: Stack -> Game Card
 -- toTop :: Stack -> Card -> Game ()
 -- fromBottom :: Stack -> Game Card
 -- toBottom :: Stack -> Card -> Game ()
 
 shuffle :: [a] -> Game [a]
-shuffle as = shuffle' (length as)
-    where shuffle' 0 _  = return []
-          shuffle' n as = do i <- liftIO $ randomRIO (0,n-1)
-                             ((as!!i):) `fmap` shuffle' (n-1) (as!-i)
-          [] !- _ = []
+shuffle []  = return []
+shuffle as = do i <- liftIO $ randomRIO (0,length as-1)
+                ((as!!i):) `fmap` shuffle (as!-i)
+    where [] !- _ = []
           (a:as) !- 0 = as
           (a:as) !- n = a:(as!-(n-1))
 
-getStack :: Stack -> Game [Card]
+-- getStack :: Stack -> Game [Card]
 
-*<< :: Stack s => s -> Card -> Game () -- put on top of stack
+(*<<) :: ModifyS Game [Card] -> Card -> Game () -- put on top of stack
 s *<< c = s (c:)
 
-.<< :: Stack s => s -> Card -> Game () -- put on bottom of stack
+(.<<) :: ModifyS Game [Card] -> Card -> Game () -- put on bottom of stack
 s .<< c = s (++[c])
 
-*<<& :: Stack s => s -> [Card] -> Game ()
-(*<<&) s = mapM_ (s^<<)
+(*<<&) :: ModifyS Game [Card] -> ([Card],StackRW) -> Game ()
+(*<<&) s1 (cs,s2) = do cs' <- remove' cs s2
+                       s1 *<<@ cs'
 
-.<<& :: Stack s => s -> [Card] -> Game ()
-(.<<&) s = mapM_ (s.<<)
+(.<<&) :: ModifyS Game [Card] -> ([Card],StackRW) -> Game ()
+(.<<&) s1 (cs,s2) = do cs' <- remove' cs s2
+                       s1 .<<@ cs'
 
-top :: Stack s => s -> Game (Maybe Card)
-bottom :: Stack s => s -> Game (Maybe Card)
+-- these are unconditional adds
+(*<<@) :: ModifyS Game [Card] -> [Card] -> Game ()
+(*<<@) s = mapM_ (s*<<)
+
+(.<<@) :: ModifyS Game [Card] -> [Card] -> Game ()
+(.<<@) s = mapM_ (s.<<)
+
+top :: StackRW -> Game (Maybe Card)
+top s = do cs <- fst s
+           case cs of
+             (x:xs) -> snd s (\_ -> xs) >> return (Just x)
+             [] -> return Nothing
+
+bottom :: StackRW -> Game (Maybe Card)
+bottom s = do cs <- fst s
+              let (xs,x) = last cs
+              snd s $ \_ -> xs
+              return x
+    where last (y:x:xs) = let (ys,l) = last (x:xs) in (y:ys,l)
+          last [x] = ([],Just x)
+          last [] = ([],Nothing)
 
 -- maybe return Game Bool?
-.<<., .<<*, *<<., *<<* :: (Stack to, Stack from) => to -> from -> Game ()
+(.<<.), (.<<*), (*<<.), (*<<*) :: ModifyS Game [Card] -> StackRW -> Game ()
 (.<<.) = moveCard (.<<) bottom
 (.<<*) = moveCard (.<<) top
 (*<<.) = moveCard (*<<) bottom
 (*<<*) = moveCard (*<<) top
 
+(.<<<), (*<<<) :: ModifyS Game [Card] -> StackRW -> Game ()
+(.<<<) = moveAllCards (.<<)
+(*<<<) = moveAllCards (*<<)
+
 -- utility function for (.<<.), etc
-moveCard :: (Stack to, Stack from)
-         => (to -> Card -> Game ()) -> (from -> Game (Maybe Card))
-         -> to -> from -> Game ()
-moveCard putCard getCard = do mc <- getCard t
-                              case mc of
-                                Nothing -> return ()
-                                Just c  -> s `putCard` c
+moveCard :: (ModifyS Game [Card] -> Card -> Game ())
+         -> (StackRW -> Game (Maybe Card))
+         -> ModifyS Game [Card] -> StackRW -> Game ()
+moveCard putCard getCard to from = do mc <- getCard from
+                                      case mc of
+                                        Nothing -> return ()
+                                        Just c  -> to `putCard` c
+
+moveAllCards :: (ModifyS Game [Card] -> Card -> Game ())
+             -> ModifyS Game [Card] -> StackRW -> Game ()
+moveAllCards putCard to from = do cs <- fst from
+                                  if null cs then return () else do
+                                  moveCard putCard top to from
+                                  moveAllCards putCard to from
 
 draw :: Int -> PId -> Game ()
-draw n p = replicateM_ n $ hand p .<<* deck p
+draw n p = do replicateM_ n $ hand p .<<* deck p
+              h <- hand p
+              tell p $ "Drew cards: hand="++show (h::[Card]) -- improve...
 
-hand :: PId -> Stack
+hand :: Stack s => PId -> s
 hand = \p ->
-       mkStack ("hand "++show p')
-               (\f -> withPlayer p' $ modify $
+       mkStack ("hand "++show p)
+               (\f -> withPlayer p $ modify $
                       \s -> s { playerHand = f $ playerHand s })
-               (gets $ playerHand . (!!p'))
+               (withPlayer p $ gets playerHand)
 
 -- we've built in the reshuffling mechanism here...!
-deck :: PId -> Stack
+deck :: Stack s => PId -> s
 deck = \p ->
        mkStack ("deck "++show p)
        (\f -> withPlayer p $ modify $
               \s -> s { playerDeck = f $ playerDeck s }) $
-               do h <- gets $ playerDeck . (!!p)
-                  if not $ null h then return h else do
-                  d <- discardPile p
-                  d' <- liftIO $ shuffle d
-                  withPlayer p $ \s -> s { playerDeck=d', playerDiscard=[] }
-                  return d'
+       do h <- withPlayer p $ gets playerDeck
+          if not $ null h then return h else do
+          d <- discard p
+          d' <- shuffle d
+          withPlayer p $ modify $ \s -> s { playerDeck=d', playerDiscard=[] }
+          return d'
 
-discard :: PId -> Stack
+discard :: Stack s => PId -> s
 discard = \p ->
           mkStack ("discard "++show p)
           (\f -> withPlayer p $ modify $
                  \s -> s { playerDiscard = f $ playerDiscard s })
-          (gets $ playerDiscard . (!!p))
+          (withPlayer p $ gets playerDiscard)
 
-mat :: String -> Pid -> Stack
+mat :: Stack s => String -> PId -> s
 mat c = \p ->
         mkStack ("mat "++show p++" "++c)
         (\f -> withPlayer p $ modify $
                \s -> s { playerMats = modifys c f $ playerMats s })
-        (gets $ maybe [] id . lookup c . playerMats . (!!p))
+        (withPlayer p $ gets $ maybe [] id . lookup c . playerMats)
     where modifys c f [] = [(c,f [])]
-          modifys c f ((c',x):ys) | c'==c     = (c',f s):ys
+          modifys c f ((c',x):ys) | c'==c     = (c',f x):ys
                                   | otherwise = (c',x):modifys c f ys
 
-durations :: PId -> Stack
+durations :: Stack s => PId -> s
 durations = \p ->
             mkStack ("durations "++show p)
             (\f -> withPlayer p $ modify $
                    \s -> s { playerDuration = f $ playerDuration s })
-            (gets $ playerDuration . (!!p))
+            (withPlayer p $ gets playerDuration)
 
-remove :: [Card] -> Stack -> Game ()
-remove cs s = do mapM_ (\c -> s (rem c)) cs
+played :: Stack s => s
+played = mkStack ("played")
+         (\f -> withTurn $ modify $
+                \s -> s { turnPlayed = f $ turnPlayed s })
+         (gets $ turnPlayed . turnState)
+
+remove :: [Card] -> ModifyS Game [Card] -> Game ()
+remove cs s = mapM_ (\c -> s (rem c)) cs
     where rem c [] = []
+          rem c (c':cs) | cardId c==cardId c' = cs
+                        | otherwise = c':rem c cs
+
+trash :: Card -> ModifyS Game [Card] -> Game ()
+trash c = remove [c]
+
+remove' :: [Card] -> StackRW -> Game [Card]
+remove' cs s = concat `fmap` mapM (r' s) cs
+    where r' (r,w) c = do h <- r
+                          if c `elem` h
+                             then do w $ rem c
+                                     return [c]
+                             else return []
+          rem c [] = []
           rem c (c':cs) | cardId c==cardId c' = cs
                         | otherwise = c':rem c cs
 
@@ -121,5 +187,5 @@ defaultGain p c = do modify $ \s -> s { gameSupply = f (gameSupply s) }
                      c' <- copyCard c
                      discard p *<< c
     where f [] = []
-          f ((i,c'):cs) | cardName c' == cardName c = (i-1,c'):cs
-                        | otherwise = (i,c'):f cs
+          f ((c',i):cs) | cardName c' == cardName c = (c',i-1):cs
+                        | otherwise = (c',i):f cs

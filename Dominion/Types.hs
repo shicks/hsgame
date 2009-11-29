@@ -1,14 +1,17 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Dominion.Types ( GameState(..), PlayerState(..), Game,
-                        withTurn, TurnState(..),
+                        withTurn, withPlayer, TurnState(..),
                         MessageToServer(..), MessageToClient(..),
-                        Card(..), CardType(..), Answer(..), QuestionMessage(..),
-                        QId, CId, PId ) where
+                        Card(..), CardType(..), Answer(..),
+                        QuestionMessage(..), InfoMessage(..),
+                        newQId, newCId, copyCard, getSelf,
+                        Attack, Reaction,
+                        QId, CId, PId(..) ) where
 
 import Control.Concurrent.Chan ( Chan, writeChan, readChan )
-import Control.Concurrent.MVar ( MVar, newEmptyMVar, takeMVar )
 import Control.Monad.State ( StateT, runStateT, gets, modify, liftIO )
+import Control.Monad ( when )
 
 type Game = StateT GameState IO
 
@@ -22,74 +25,88 @@ data GameState = GameState {
       gameSupply   :: [(Card,Int)],
       currentTurn  :: PId,
       turnState    :: TurnState,
-      hookGain     :: Card -> PId -> Game (),
+      hookGain     :: PId -> Card -> Game (),
       inputChan    :: Chan MessageToServer,
       _qIds        :: [QId],  -- [QId 0..]
       _cIds        :: [CId]   -- [CId 0..]
     }
 
 data PlayerState = PlayerState {
-      playerId       :: PId,
-      playerName     :: String,
-      playerChan     :: Chan MessageToClient,
-      playerHand     :: [Card],
-      playerDeck     :: [Card],
-      playerDiscard  :: [Card],
-      playerDuration :: [Card],
-      playerMats     :: [(String,[Card])]
+      playerId        :: PId,
+      playerName      :: String,
+      playerChan      :: Chan MessageToClient,
+      playerHand      :: [Card],
+      playerDeck      :: [Card],
+      playerDiscard   :: [Card],
+      playerDuration  :: [Card],
+      playerMats      :: [(String,[Card])],
+      durationEffects :: [Game ()]
     }
 
 data TurnState = TurnState {
       turnActions  :: Int,
       turnBuys     :: Int,
       turnCoins    :: Int,
-      turnPriceMod :: Card -> Int
+      turnPriceMod :: Card -> Int,
+      turnPlayed   :: [Card]
 }
 
 data Card = Card {
       cardId    :: CId,
+      cardPrice :: Int,
       cardName  :: String,
       cardText  :: String,
-      cardType  :: [CardType],
-      cardPrice :: Int
+      cardType  :: [CardType]
     }
-    deriving ( Eq, Show )
+instance Eq Card where
+    Card i _ _ _ _ == Card j _ _ _ _ = i==j
+instance Show Card where
+    show (Card id_ pr name text_ typ_) = '(':show pr++") "++name -- ++": "++text
 
 data CardType
     = Action (Game ())
     | Victory
     | Treasure Int
-    | Score (Int -> GameState -> Int)
-  --  | Reaction Reaction
+    | Reaction Reaction
+    | Score (Int -> Game Int)
 
 instance Show CardType where
     show (Action _) = "Action"
     show Victory = "Victory"
-    show (Treasure n) = "Treasure "++show n
-    show (Score _) = "Score"
+    show (Treasure n) = "Treasure"
+    show (Reaction _) = "Reaction"
+    show _ = ""
 
-instance Eq CardType where
-    Action _ == Action _ = True
-    Victory == Victory = True
-    Treasure _ == Treasure _ = True
-    Score _ == Score _ = True
-    _ == _ = False
+-- *How to actually perform the attack.  This is slightly tricky, since
+-- some attacks depend on choices made by attacker...
+type Attack = PId      -- ^attacker
+            -> PId     -- ^defender
+            -> Game ()
 
-type PId = Int -- Player
+-- *Basic reaction type is @Attack -> Attack@.  But @Reaction@ type asks
+-- the attacked player what to do, and gives a continuation in case the
+-- attack is still unresolved.  @Duration@s can "install" @Reaction@s as
+-- well.
+type Reaction = PId                       -- ^defender
+              -> Game (Attack -> Attack)  -- ^continuation
+              -> Game (Attack -> Attack)
+
+newtype PId = PId Int deriving ( Real, Integral, Num, Eq, Ord, Enum,
+                                 Show, Read ) -- Player
 newtype QId = QId Int deriving ( Num, Eq, Ord, Enum, Show, Read ) -- Question
 newtype CId = CId Int deriving ( Num, Eq, Ord, Enum, Show, Read ) -- Card
 
 data MessageToClient = Info InfoMessage
                      | Question QId QuestionMessage [Answer] (Int,Int)
 data MessageToServer = AnswerFromClient QId [Answer]
-                     | RegisterQuestion QId ([Answer] -> Game Bool)
+                     | RegisterQuestion QId ([Answer] -> IO Bool)
 
 data Answer = PickCard Card | Choose String  deriving ( Eq, Show )
 data InfoMessage = InfoMessage String        deriving ( Show )
 data QuestionMessage
     = SelectAction | SelectReaction String           -- from hand
     | SelectSupply String | SelectBuy | SelectGain   -- from supply
-    | DiscardBecause String                          -- maybe Card instead?
+    | DiscardBecause String | UndrawBecause String   -- maybe Card instead?
     | TrashBecause String
     | OtherQuestion String                           -- e.g. envoy?
     deriving ( Show )
@@ -101,22 +118,48 @@ data QuestionMessage
 
 withTurn :: StateT TurnState IO a -> Game a
 withTurn job = do s <- gets turnState
-                  (a, s') <- liftIO $ runStateT job s
+                  (a,s') <- liftIO $ runStateT job s
                   modify $ \ss -> ss { turnState = s' }
                   return a
 
-{-
-withPlayer :: Player p => p -> StateT IO PlayerState a -> Game a
-withPlayer n job = do n' <- toP n
-                      p <- gets $ (!!n') . playerState
-                      (p',a) <- liftIO $ runStateT job p
-                      modify $ \s -> s { playerState = mod p' n' s }
-                      return a
+withPlayer :: PId -> StateT PlayerState IO a -> Game a
+withPlayer (PId n) job = do ps <- gets gamePlayers
+                            when (n>=length ps) $
+                                 fail $ "withPlayer: invalid PId: "++show n
+                            let p = ps!!n 
+                            (a,p') <- liftIO $ runStateT job p
+                            modify $ \s -> s { gamePlayers = mod p' n $
+                                                             gamePlayers s }
+                            return a
     where mod _ _ [] = [] -- fail "withPlayer: invalid PId"?
           mod p' 0 (_:ss) = (p':ss)
           mod p' n (s:ss) = s:mod p' (n-1) ss
--}
 
+
+newQId :: Game QId
+newQId = do qs <- gets _qIds
+            modify $ \s -> s { _qIds = tail qs }
+            return $ head qs
+
+newCId :: Game CId
+newCId = do cs <- gets _cIds
+            modify $ \s -> s { _cIds = tail cs }
+            return $ head cs
+
+copyCard :: Card -> Game Card
+copyCard c = do u <- newCId
+                return $ c { cardId = u }
+
+getSelf :: Game PId
+getSelf = gets currentTurn
+
+left :: PId -> Game PId
+left p = do n <- gets $ length . gamePlayers
+            return $ (p+PId 1) `mod` PId n
+
+right :: PId -> Game PId
+right p = do n <- gets $ length . gamePlayers
+             return $ (p+PId n-PId 1) `mod` PId n
 
 -- class Player p where
 --     toP :: p -> Game PId
