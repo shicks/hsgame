@@ -1,19 +1,3 @@
-||| Merge >>>
-module TCP.Client ( connectToServer ) where
-
-import Network ( connectTo, PortID(PortNumber) )
-import System.IO ( hSetBuffering, BufferMode(LineBuffering) )
-import TCP.Chan ( ShowRead, Input, Output, handle2io )
-
-connectToServer :: (ShowRead a, ShowRead b) =>
-                   String -> Int -> IO (Input a, Output b)
-connectToServer hostname port =
-    do h <- connectTo hostname (PortNumber $ fromIntegral port)
-       hSetBuffering h LineBuffering
-       handle2io h
-
-<<< Merge |||
-||| Merge stupidly? >>>
 module TCP.Client ( Client, runClientTCP, pureClient, ioClient, decoupledClient,
                     forkClient, ClientModifier, modifyClient,
                     ioClientModifier, pureClientModifier ) where
@@ -95,5 +79,3 @@ modifyClient (CM f) c = ioClient $ \iup oup ->
        forkIO $ forever $ do x <- readInput i
                              writeOutput oboth (Right x)
        f oup o iboth
-
-<<< Merge stupidly? |||

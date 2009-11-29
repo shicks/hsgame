@@ -1,15 +1,3 @@
-||| Merge >>>
-import TCP.Server ( startServer )
-import TCP.Chan ( writeOutput )
-
-import Control.Monad ( forever )
-
-main :: IO ()
-main = startServer 12345 $ \n _ o ->
-       forever $ writeOutput o ("hello " ++ n)
-
-<<< Merge |||
-||| Merge stupidly? >>>
 import TCP.Server ( runServerTCP )
 import TCP.ServerTypes ( ioServer, ServerMessage(M,N) )
 import TCP.Message ( Message(Message) )
@@ -31,5 +19,3 @@ main = runServerTCP 12345 $  ioServer handle
                    Message x _ (M s) ->
                        writeOutput fromRoomW (Message "server" x $
                                               "I don't care about "++s)
-
-<<< Merge stupidly? |||
