@@ -19,4 +19,3 @@ main = build [] $ do -- autoVersion Numbered
                      executable "testdom" "testdom.hs" []
                      executable "lobby-chat" "lobby-chat.hs" []
                      executable "yamltest" "yamltest.hs" []
-
