@@ -29,8 +29,11 @@ client n inc outc = handle prefix
                                 do putStrLn msg
                                    putStrLn $ "Question: " ++ show m
                                    putStrLn "Options:"
+                                   let pretty (Choose s) = s
+                                       pretty (PickCard c) = cname c++
+                                           " ("++show (cprice c)++")"
                                    mapM_ (\(n,a) -> putStrLn $ "  " ++ show n
-                                                    ++ ": " ++ show a) $
+                                                    ++ ": " ++ pretty a) $
                                                     zip [1..] as
                                    putStr $ "Enter " ++ show a0 ++ " to "
                                               ++ show a1 ++
