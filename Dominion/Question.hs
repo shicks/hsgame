@@ -47,6 +47,7 @@ askCards p cs q (mn,mx) =
                           | test as cs = do putMVar mv $ catMaybes $
                                              map ((`lookupCard` cs) . unCard) as
                                             return True
+                          | otherwise = go >> return False
          writeOutput ich $ RQ qid $ verify mv
          go
          takeMVar mv
