@@ -1,3 +1,29 @@
+||| add lobby-chat which supports tables. >>>
+old
+*~
+*.[oa]
+*.hi
+config.d
+*.depend
+*.log
+.package.conf
+.package.conf.old
+.yaml-simple
+dist
+*.cfg
+*.config
+yell
+echo
+testyaml
+telnet
+chat
+purechat
+named-chat
+yamltest
+lobby-chat
+
+<<< add lobby-chat which supports tables. |||
+||| reorganize actions in Game.hs >>>
 old
 *~
 *.[oa]
@@ -16,3 +42,5 @@ echo
 telnet
 chat
 yamltest
+
+<<< reorganize actions in Game.hs |||
