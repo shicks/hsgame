@@ -12,6 +12,7 @@ import Control.Monad.State ( evalStateT )
 import Data.IORef ( newIORef, readIORef, writeIORef )
 import System.IO ( hFlush, stdout )
 import System.Environment ( getArgs )
+import System.Random ( randomRIO )
 
 import Debug.Trace ( trace )
 
@@ -56,6 +57,46 @@ client n inc outc = handle prefix
                            spaces++n++spaces,
                            replicate 40 '-',""]
 
+bot :: String -> Input MessageToClient -> Output ResponseFromClient -> IO ()
+bot n inc outc = handle prefix
+    where handle msg = do putStrLn "waiting on input from server..."
+                          q <- readInput inc
+                          putStrLn "got input from server."
+                          putStrLn $ show q
+                          case q of
+                            Info m -> case m of
+                                        InfoMessage s -> handle (msg++s++"\n")
+                                        -- _ -> putStrLn $ show m
+                            Question i m as (a0,a1) ->
+                                do putStrLn msg
+                                   putStrLn $ "Question: " ++ show m
+                                   putStrLn "Options:"
+                                   let pretty (Choose s) = s
+                                       pretty (PickCard c) = cname c++
+                                           " ("++show (cprice c)++")"
+                                   mapM_ (\(n,a) -> putStrLn $ "  " ++ show n
+                                                    ++ ": " ++ pretty a) $
+                                                    zip [1..] as
+                                   putStr $ "Enter " ++ show a0 ++ " to "
+                                              ++ show a1 ++
+                                              " numbers, separated by spaces: "
+                                   hFlush stdout
+                                   numpicked <- randomRIO (a0,a1)
+                                   let r = take numpicked as
+                                   writeOutput outc $ ResponseFromClient i r
+                                   handle prefix
+          spaces = replicate ((40-length n)`div`2) ' '
+          ints n [] = []
+          ints n (s:ss) = case readsPrec 0 s of
+                            [(x,"")] | x <= n -> x:ints n ss
+                                     | otherwise -> trace ("rejecting "++show x) $ ints n ss
+                            _ -> ints n ss
+          xs !!! n = if n >= length xs then putStrLn ("!!!: "++show n++" >= length "++show xs) >> return (head xs)
+                     else return $ xs !! n
+          prefix = unlines["",replicate 40 '=',
+                           spaces++n++spaces,
+                           replicate 40 '-',""]
+
 server :: Output (Message String MessageToClient)
        -> Input (Message String (ServerMessage ResponseFromClient))
        -> IO ()
@@ -79,6 +120,8 @@ main :: IO ()
 main =
     do args <- getArgs
        case args of
+         [name@('b':'o':'t':_),hostname] ->
+             runClientTCP hostname 12345 $ ioClient $ bot name
          [name,hostname] ->
              runClientTCP hostname 12345 $ ioClient $ client name
          ["server"] ->
