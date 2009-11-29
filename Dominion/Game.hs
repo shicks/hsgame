@@ -64,9 +64,11 @@ play = do winner <- endGame
             Just s -> return s
             Nothing -> turn >> play
     where endGame = do sup <- gets gameSupply
-                       let empty = filter ((<=0).snd) sup
+                       np <- gets $ length . gamePlayers
+                       let piles = if np>4 then 4 else 3
+                           empty = filter ((<=0).snd) sup
                            prov = map snd $ filter (isProvince.fst) sup
-                           over = length empty >= 3 || head prov <= 0
+                           over = length empty >= piles || head prov <= 0
                        if not over then return Nothing else do
                        ps <- gets gamePlayers
                        (Just . zip (map playerName ps))
