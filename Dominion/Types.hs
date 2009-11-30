@@ -1,6 +1,8 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, MultiParamTypeClasses #-}
 
 module Dominion.Types ( GameState(..), PlayerState(..), Game,
+                        runGame, evalGame, execGame,
+                        GameError(),
                         withTurn, withPlayer, TurnState(..),
                         StackName(..),
                         MessageToServer(..), RegisterQuestionMessage(..),
@@ -14,7 +16,11 @@ module Dominion.Types ( GameState(..), PlayerState(..), Game,
                         QId, CId, PId(..) ) where
 
 import TCP.Chan ( ShowRead, Input, Output )
-import Control.Monad.State ( StateT, runStateT, gets, modify, liftIO )
+import Control.Monad.State ( StateT(..), MonadState,
+                             get, gets, put, modify, liftIO )
+import Control.Monad.Error ( MonadError, Error(..),
+                             catchError, throwError )
+import Control.Monad.Trans ( MonadIO, liftIO )
 import Control.Monad ( when )
 import Data.Array ( Array, Ix, bounds, elems, listArray )
 
@@ -24,7 +30,45 @@ import Data.Array ( Array, Ix, bounds, elems, listArray )
 --   try job = lift $ runErrorT job
 -- We could also rethrow anything that *isn't* a pattern match error...
 
-type Game = StateT GameState IO
+-- type Game = StateT GameState IO
+
+-- Did I mix up the threading...?
+newtype GameError = GameError String deriving ( Eq, Show, Error )
+newtype Game a = Game {
+      runGame :: GameState -> IO (Either GameError a,GameState)
+    }
+
+evalGame :: Game a -> GameState -> IO (Either GameError a)
+evalGame g s = fst `fmap` runGame g s
+
+execGame :: Game a -> GameState -> IO GameState
+execGame g s = snd `fmap` runGame g s
+
+instance Monad Game where
+    return a = Game $ \s -> return (Right a,s)
+    fail e = Game $ \s -> return (Left $ error e,s)
+    Game a >>= f = Game $ \s -> do (a',s') <- a s
+                                   case a' of
+                                     Left e -> return (Left e,s')
+                                     Right a'' -> runGame (f a'') s'
+
+instance MonadState GameState Game where
+    get = Game $ \s -> return (Right s,s)
+    put s = Game $ \_ -> return (Right (),s)
+
+instance MonadError GameError Game where
+    throwError e = Game $ \s -> return (Left e,s)
+    catchError (Game a) f = Game $ \s -> do (a',s') <- a s
+                                            case a' of
+                                              Left e -> runGame (f e) s'
+                                              _ -> return (a',s')
+
+instance MonadIO Game where
+    liftIO a = Game $ \s -> do { a' <- a; return (Right a',s) }
+
+instance Functor Game where
+    fmap f (Game a) = Game $ \s -> do (a',s') <- a s
+                                      return (f `fmap` a',s')
 
 data GameState = GameState {
       gamePlayers  :: [PlayerState],

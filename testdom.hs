@@ -123,7 +123,7 @@ server o i = do Message player1 _ N <- readInput i
                                       writeOutput o2s m
                 decks <- pickDecks
                 state <- start [(player1,oplayer1),(player2,oplayer2)] i2s decks
-                evalStateT play state >>= print
+                evalGame play state >>= print
 
 main :: IO ()
 main =
@@ -151,7 +151,7 @@ twoPlayer = do
           forkIO $ stdioClient "Bob" c2i cout_o
           decks <- pickDecks
           state <- start [("Alice",c1o),("Bob",c2o)] cout_i decks
-          evalStateT play state >>= print
+          evalGame play state >>= print
 
 -- Crazy ideas
 
