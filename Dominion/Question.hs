@@ -7,6 +7,10 @@ import Control.Concurrent.MVar ( newEmptyMVar, takeMVar, putMVar )
 import Control.Monad.State ( gets, liftIO )
 import Data.Maybe ( catMaybes )
 
+tell :: PId -> String -> Game ()
+tell p s = do och <- withPlayer p $ gets playerChan
+              liftIO $ writeOutput och $ Info $ InfoMessage s
+
 -- *simple question with list of answers: choose 1
 ask1 :: PId -> [Answer] -> QuestionMessage -> Game Answer
 ask1 p [] _ = fail "ask1 requires nonempty choices"
@@ -26,9 +30,10 @@ ask1 p as q = do liftIO $ putStrLn $ "ask1: p="++show p
                    go
                    takeMVar mv
 
-tell :: PId -> String -> Game ()
-tell p s = do och <- withPlayer p $ gets playerChan
-              liftIO $ writeOutput och $ Info $ InfoMessage s
+-- *even simpler wrapper around ask1
+askYN :: PId -> String -> Game Bool
+askYN p s = do a <- ask1 p [Choose "Yes",Choose "No"] $ OtherQuestion s
+               return $ case a of { Choose "Yes" -> True; _ -> False }
 
 -- *simple question with list of cards: choose between m and n
 askCards :: PId -> [Card] -> QuestionMessage -> (Int,Int) -> Game [Card]
