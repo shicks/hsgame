@@ -114,12 +114,10 @@ turn = do self <- gets currentTurn
                    -- tell self $ "  supply=" ++ show supply
                    price <- gets $ turnPriceMod . turnState
                    sup <- supplyCosting (<=money)
-                   cs <- askCards self sup SelectBuy (0,1)
-                   case cs of
-                     [c] -> do gain self discard *<< cs
-                               when (buys>1) $
-                                    buy self (buys-1) (money - price c)
-                     _ -> return ()
+                   try $ do
+                     [c] <- askCards self sup SelectBuy (0,1)
+                     gain self discard *<< [c]
+                     when (buys>1) $ buy self (buys-1) (money - price c)
           duration self = do played <<< durations self
                              withPlayer self (gets durationEffects)
                                             >>= sequence_

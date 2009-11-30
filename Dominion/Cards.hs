@@ -70,9 +70,11 @@ oneShot act = Action $ \this _ -> do self <- getSelf
                                      trash << [this]
                                      act
 dominion :: [Card]
-dominion = [chapel, cellar, feast, festival, laboratory, library,
-            market, militia, mine, moat, remodel, smithy, thief,
-            throneRoom, witch, woodcutter, workshop, village]
+dominion = [adventurer, bureaucrat, cellar, chancellor, chapel,
+            councilRoom, feast, festival, gardens, laboratory,
+            library, market, militia, mine, moat, moneylender,
+            remodel, smithy, spy, thief, throneRoom, village,
+            witch, woodcutter, workshop]
 
 promos :: [Card]
 promos = []
@@ -85,11 +87,25 @@ seaside = [bazaar, caravan, fishingVillage, lookout, merchantShip,
            pearlDiver, salvager, tactician, warehouse, wharf]
 
 -- cards themselves
-chapel :: Card
-chapel = Card 0 2 "Chapel" "Trash up to 4 cards from your hand" [action a]
-    where a = do (self,h,_) <- getSHP
-                 cs <- askCards self h (TrashBecause "chapel") (0,4)
-                 trash << cs
+adventurer :: Card
+adventurer = Card 0 6 "Adventurer" "..." [action $ try $ dig 0 ]
+    where dig 2 = return ()
+          dig n = do self <- getSelf
+                     [c] <-1<* deck self
+                     if isTreasure c
+                        then hand self << [c] >> dig (n+1)
+                        else discard self *<< [c] >> dig n
+
+bureaucrat :: Card
+bureaucrat = Card 0 4 "Bureaucrat" "..." [action a]
+    where a = do attackNow "bureaucrat" $ \self opp -> try $ do
+                   h <- getStack $ hand opp
+                   let vs = filter isVictory h
+                   if null vs then return () else do -- reveal hand...?
+                   [c] <- askCards opp vs (UndrawBecause "bureaucrat") (1,1)
+                   deck opp *<< [c]
+                 self <- getSelf
+                 try $ gain self deck *<< [silver]
 
 cellar :: Card
 cellar = Card 0 2 "Cellar" "..." [action a]
@@ -98,6 +114,25 @@ cellar = Card 0 2 "Cellar" "..." [action a]
                  cs <- askCards self h (DiscardBecause "cellar") (0,length h)
                  discard self *<< cs
                  draw (length cs) self
+
+chancellor :: Card
+chancellor = Card 0 3 "Chancellor" "..." [action a]
+    where a = do self <- getSelf
+                 plusCoin 2
+                 shuf <- askYN self "Reshuffle deck?"
+                 when shuf $ discard self *<<< deck self
+
+chapel :: Card
+chapel = Card 0 2 "Chapel" "Trash up to 4 cards from your hand" [action a]
+    where a = do (self,h,_) <- getSHP
+                 cs <- askCards self h (TrashBecause "chapel") (0,4)
+                 trash << cs
+
+councilRoom :: Card
+councilRoom = Card 0 5 "Council Room" "..." [action a]
+    where a = do plusCard 4
+                 opp <- opponents
+                 forM_ opp $ draw 1
 
 feast :: Card
 feast = Card 0 4 "Feast" "Trash this card.  Gain a card costing up to 5"
@@ -108,6 +143,12 @@ feast = Card 0 4 "Feast" "Trash this card.  Gain a card costing up to 5"
 
 festival :: Card
 festival = Card 0 5 "Festival" "..." $ [action $ plusABCD 2 1 2 0]
+
+gardens :: Card
+gardens = Card 0 4 "Gardens" "..." $ [Victory, Score s]
+    where s n = do self <- getSelf
+                   c <- length `fmap` allCards self
+                   return $ n + c`div`10
 
 laboratory :: Card
 laboratory = Card 0 5 "Laboratory" "..." $ [action $ plusABCD 1 0 0 2]
@@ -133,7 +174,7 @@ market = Card 0 5 "Market" "..." [action $ plusABCD 1 1 1 1]
 militia :: Card
 militia = Card 0 4 "Militia" "..." [action a]
     where a = do plusCoin 2
-                 attackNow "Militia" $ \_ opp -> do
+                 attackNow "militia" $ \_ opp -> do
                    h <- getStack $ hand opp
                    let n = length h
                    when (n>3) $ do
@@ -154,6 +195,14 @@ moat :: Card
 moat = Card 0 2 "Moat" "..." [action $ plusCard 2,Reaction r]
     where r _ _ = return $ \_ _ _ -> return ()
 
+moneylender :: Card
+moneylender = Card 0 3 "Moneylender" "..." [action $ try a]
+    where a = do (self,h,_) <- getSHP
+                 [c] <- askCards self (filter (isNamed "Copper") h)
+                        (TrashBecause "moneylender") (1,1)
+                 trash << [c]
+                 plusCoin 3
+
 remodel :: Card
 remodel = Card 0 4 "Remodel" "..." [action $ try a]
     where a = do (self,h,price) <- getSHP
@@ -164,6 +213,18 @@ remodel = Card 0 4 "Remodel" "..." [action $ try a]
 
 smithy :: Card
 smithy = Card 0 4 "Smithy" "..." [action $ plusCard 3]
+
+spy :: Card
+spy = Card 0 4 "Spy" "..." [action a]
+    where a = do self <- getSelf
+                 plusAction 1 >> plusCard 1
+                 spy self self
+                 attackNow "spy" spy
+          spy self p = try $ do [c] <-1<* deck p
+                                pname <- withPlayer p $ gets playerName
+                                kill <- askYN self $ "(Player "++pname
+                                        ++"): Discard "++show c++"?"
+                                when kill $ discard p *<< [c]
 
 thief :: Card
 thief = Card 0 4 "Thief" "..." [action a]
@@ -339,7 +400,7 @@ isVictory c = not $ null [() | Treasure _ <- cardType c]
 isTreasure :: Card -> Bool
 isTreasure c = not $ null [() | Treasure _ <- cardType c]
 
-getTreasure :: Card -> Int
+getTreasure :: Card -> Int -- this needs to be monadic: coppersmith!
 getTreasure c = sum [t | Treasure t <- cardType c] 
 
 isAction :: Card -> Bool
@@ -352,6 +413,8 @@ getActionPred :: Card -> Card -> Game ()
 getActionPred pred c = foldl (>>) (return ())
                        [a c (Just pred) | Action a <- cardType c]
 
+isNamed :: String -> Card -> Bool
+isNamed name c = cardName c == name
 
 -- Want some sort of asynchrony, in that we can go on with our
 -- turn while others are selecting their reactions...
