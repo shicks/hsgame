@@ -7,18 +7,20 @@ import Dominion.Question
 
 import Control.Applicative ( pure, (<*>) )
 import Control.Monad.State ( gets, modify )
-import Control.Monad ( when, replicateM )
+import Control.Monad ( when, join, replicateM )
 import Data.Maybe ( listToMaybe, catMaybes )
 
 
 import Control.Monad.Trans ( liftIO ) -- for debugging!
 
-getSHGP :: Game (PId, [Card], PId -> Card -> Game (), Card -> Int) 
-getSHGP = do self <- gets currentTurn
-             h <- getStack $ hand self
-             gain <- gets hookGain
-             price <- withTurn $ gets turnPriceMod
-             return (self,h,gain,price)
+gain :: PId -> Card -> Game ()
+gain p c = join $ (($c) . ($p)) `fmap` gets hookGain
+
+getSHP :: Game (PId, [Card], Card -> Int) 
+getSHP = do self <- gets currentTurn
+            h <- getStack $ hand self
+            price <- withTurn $ gets turnPriceMod
+            return (self,h,price)
 
 -- helper functions
 affords :: Game (Int -> Card -> Bool)
@@ -66,13 +68,13 @@ seaside = [caravan]
 -- cards themselves
 chapel :: Card
 chapel = Card 0 2 "Chapel" "Trash up to 4 cards from your hand" [Action a]
-    where a _ = do (self,h,_,_) <- getSHGP
+    where a _ = do (self,h,_) <- getSHP
                    cs <- askCards self h (TrashBecause "chapel") (0,4)
                    mapM_ (flip trash $ hand self) cs
 
 cellar :: Card
 cellar = Card 0 2 "Cellar" "..." [Action a]
-    where a _ = do (self,h,_,_) <- getSHGP
+    where a _ = do (self,h,_) <- getSHP
                    plusAction 1
                    cs <- askCards self h (DiscardBecause "cellar") (0,length h)
                    discard self *<<& (cs,hand self)
@@ -81,7 +83,7 @@ cellar = Card 0 2 "Cellar" "..." [Action a]
 feast :: Card
 feast = Card 0 4 "Feast" "Trash this card.  Gain a card costing up to 5"
         [Action a]
-    where a this = do (self,_,gain,_) <- getSHGP
+    where a this = do self <- getSelf
                       trash this $ played
                       sup <- supplyCosting (<=5)
                       cs <- askCards self sup SelectGain (1,1)
@@ -134,7 +136,7 @@ militia = Card 0 4 "Militia" "..." [Action a]
 
 mine :: Card
 mine = Card 0 5 "Mine" "..." [Action a]
-    where a _ = do (self,h,gain,price) <- getSHGP
+    where a _ = do (self,h,price) <- getSHP
                    cs <- askCards self (filter isTreasure h)
                          (TrashBecause "mine") (1,1)
                    if null cs then return () else do
@@ -151,7 +153,7 @@ moat = Card 0 2 "Moat" "..." [Action $ \_ -> getSelf >>= draw 2,Reaction r]
 
 remodel :: Card
 remodel = Card 0 4 "Remodel" "..." [Action a]
-    where a _ = do (self,h,gain,price) <- getSHGP
+    where a _ = do (self,h,price) <- getSHP
                    cs <- askCards self h (TrashBecause "remodel") (1,1)
                    if null cs then return () else do
                    let c = head cs
@@ -178,7 +180,7 @@ thief = Card 0 4 "Thief" "..." [Action a]
 
 throneRoom :: Card
 throneRoom = Card 0 4 "Throne Room" "..." [Action a]
-    where a _ = do (self,h,_,_) <- getSHGP
+    where a _ = do (self,h,_) <- getSHP
                    let as = filter isAction h
                    cs <- askCards self as SelectAction (1,1)
                    case cs of [c] -> do played *<<& (cs,hand self)
@@ -200,7 +202,7 @@ woodcutter = Card 0 3 "Woodcutter" "..." [Action $ \_ -> plusCoin 2 >> plusBuy 1
 
 workshop :: Card
 workshop = Card 0 3 "Workshop" "..." [Action a]
-    where a _ = do (self,_,gain,_) <- getSHGP
+    where a _ = do self <- getSelf
                    sup <- supplyCosting (<=4)
                    cs <- askCards self sup SelectGain (1,1)
                    mapM_ (gain self) cs
@@ -224,7 +226,7 @@ secretChamber = Card 0 2 "Secret Chamber" "..." [Action act,Reaction react]
                                      (UndrawBecause "secret chamber") (2,2)
                                deck self *<<& (cs,hand self)
                                cont
-          act _ = do (self,h,_,_) <- getSHGP
+          act _ = do (self,h,_) <- getSHP
                      cs <- askCards self h (DiscardBecause "secret chamber")
                            (0,length h)
                      discard self *<<& (cs,hand self)
