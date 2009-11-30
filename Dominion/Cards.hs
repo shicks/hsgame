@@ -9,7 +9,7 @@ import Control.Applicative ( pure, (<*>) )
 import Control.Monad.State ( gets, modify )
 import Control.Monad ( when, unless, join, replicateM, forM_  )
 import Data.Maybe ( listToMaybe, maybeToList, catMaybes, fromMaybe )
-import Data.List ( (\\), nubBy )
+import Data.List ( (\\), nubBy, partition )
 
 -- import Control.Monad.Trans ( liftIO ) -- for debugging!
 
@@ -62,12 +62,12 @@ action act = Action $ \_ _ -> act
 duration :: Game () -> CardType
 duration act = Action $ \this pred -> do self <- getSelf
                                          let save = this:maybeToList pred
-                                         durations self *<<@ save
+                                         durations self << save
                                          act
 
 oneShot :: Game () -> CardType
 oneShot act = Action $ \this _ -> do self <- getSelf
-                                     trash *<< this
+                                     trash << [this]
                                      act
 dominion :: [Card]
 dominion = [chapel, cellar, feast, festival, laboratory, library,
@@ -89,14 +89,14 @@ chapel :: Card
 chapel = Card 0 2 "Chapel" "Trash up to 4 cards from your hand" [action a]
     where a = do (self,h,_) <- getSHP
                  cs <- askCards self h (TrashBecause "chapel") (0,4)
-                 trash *<<@ cs
+                 trash << cs
 
 cellar :: Card
 cellar = Card 0 2 "Cellar" "..." [action a]
     where a = do (self,h,_) <- getSHP
                  plusAction 1
                  cs <- askCards self h (DiscardBecause "cellar") (0,length h)
-                 discard self *<<@ cs
+                 discard self *<< cs
                  draw (length cs) self
 
 feast :: Card
@@ -104,9 +104,7 @@ feast = Card 0 4 "Feast" "Trash this card.  Gain a card costing up to 5"
         [oneShot a]
     where a = do self <- getSelf
                  sup <- supplyCosting (<=5)
-                 cs <- askCards self sup SelectGain (1,1)
-                 case cs of [c] -> gain self c
-                            _   -> return ()
+                 gain self discard *<# askCards self sup SelectGain (1,1)
 
 festival :: Card
 festival = Card 0 5 "Festival" "..." $ [action $ plusABCD 2 1 2 0]
@@ -120,17 +118,16 @@ library = Card 0 5 "Library" "..." [action a]
                  while $ do
                    h <- getStack $ hand self
                    if length h >= 7 then return False else do
-                   mc <- peekTop $ deck self
+                   mc <- top 1 $ deck self
                    case mc of
-                     Nothing -> return True
-                     Just c
-                       | isAction c -> do
+                     [] -> return True
+                     [c] | isAction c -> do
                              keep <- askYN self $ "Keep "++show c++"?"
-                             if keep then hand self *<< c
-                                     else discard self *<< c
+                             if keep then hand    self  << [c]
+                                     else discard self *<< [c]
                              return True
-                       | otherwise -> do
-                             hand self *<< c
+                         | otherwise -> do
+                             hand self << [c]
                              tell self $ "Drew "++show c
                              return True
           while job = do { result <- job; when result $ while job }
@@ -146,7 +143,7 @@ militia = Card 0 4 "Militia" "..." [action a]
                    let n = length h
                    when (n>3) $ do
                      cs <- askCards opp h (DiscardBecause "militia") (n-3,n-3)
-                     discard opp *<<@ cs
+                     discard opp *<< cs
 
 mine :: Card
 mine = Card 0 5 "Mine" "..." [action a]
@@ -155,11 +152,9 @@ mine = Card 0 5 "Mine" "..." [action a]
                        (TrashBecause "mine") (1,1)
                  if null cs then return () else do
                  let c = head cs
-                 trash *<< c
+                 trash << [c]
                  sup <- filter isTreasure `fmap` supplyCosting (<=(price c+3))
-                 cs' <- askCards self sup SelectGain (1,1)
-                 if null cs' then return () else do gain self $ head cs'
-                                                    hand self *<<* discard self
+                 gain self hand <# askCards self sup SelectGain (1,1)
 
 moat :: Card
 moat = Card 0 2 "Moat" "..." [action $ plusCard 2,Reaction r]
@@ -171,10 +166,9 @@ remodel = Card 0 4 "Remodel" "..." [action a]
                  cs <- askCards self h (TrashBecause "remodel") (1,1)
                  if null cs then return () else do
                  let c = head cs
-                 trash *<< c
+                 trash << [c]
                  sup <- supplyCosting (<=(price c+2))
-                 cs' <- askCards self sup SelectGain (1,1)
-                 if null cs' then return () else gain self $ head cs'
+                 gain self discard *<# askCards self sup SelectGain (1,1)
 
 smithy :: Card
 smithy = Card 0 4 "Smithy" "..." [action $ plusCard 3]
@@ -182,23 +176,15 @@ smithy = Card 0 4 "Smithy" "..." [action $ plusCard 3]
 thief :: Card
 thief = Card 0 4 "Thief" "..." [action a]
     where a = attackNow "thief" $ \self opp -> do
-                -- This is probably broken now, since
-                -- top doesn't *do* anything with the card,
-                -- so deck never empties.
-                -- Instead, we should probably define a stack as
-                -- something with operations to look at at least N
-                -- cards, and to add N cards to top/bottom.  This
-                -- would be a pretty drastic shift again, but would
-                -- decrease writes a good bit.
-                cs <- catMaybes `fmap` replicateM 2 (top $ deck opp)
-                discard opp *<<@ cs
-                let treas = filter isTreasure cs
-                tc <- askCards self treas (TrashBecause "thief") (1,1)
-                trash  *<<@ tc      -- redundant...
+                cs <-2<* deck opp
+                let (ts,nts) = partition isTreasure cs
+                discard opp *<< nts
+                tc <- askCards self ts (TrashBecause "thief") (1,1)
+                trash << tc
                 case tc of
                   [c] -> do keep <- askYN self $ "Keep "++show c++"?"
-                            when keep $ discard self *<< c
-                  _ -> return ()
+                            when keep $ gain self discard *<< [c]
+                  _   -> return ()
 
 -- TR and durations - FV=Fishing Village
 -- card (pred)    [self is always self]
@@ -214,7 +200,7 @@ throneRoom = Card 0 4 "Throne Room" "..." [Action a]
                            let as = filter isAction h
                            cs <- askCards self as SelectAction (1,1)
                            let pred' = fromMaybe this pred
-                           case cs of [c] -> do played *<< c
+                           case cs of [c] -> do played << [c]
                                                 getAction c
                                                 getActionPred pred' c
                                       _   -> return ()
@@ -225,7 +211,7 @@ throneRoom = Card 0 4 "Throne Room" "..." [Action a]
 witch :: Card
 witch = Card 0 5 "Witch" "..." [action a]
     where a = do plusCard 2
-                 attackNow "witch" $ \_ opp -> gain opp curse
+                 attackNow "witch" $ \_ opp -> gain opp discard *<< [curse]
 
 woodcutter :: Card
 woodcutter = Card 0 3 "Woodcutter" "..." [action $ plusABCD 0 1 2 0]
@@ -234,8 +220,7 @@ workshop :: Card
 workshop = Card 0 3 "Workshop" "..." [action a]
     where a = do self <- getSelf
                  sup <- supplyCosting (<=4)
-                 cs <- askCards self sup SelectGain (1,1)
-                 mapM_ (gain self) cs
+                 gain self discard *<# askCards self sup SelectGain (1,1)
 
 village :: Card
 village = Card 0 3 "Village" "..." $ [action $ plusABCD 2 0 0 1]
@@ -247,8 +232,7 @@ courtyard :: Card
 courtyard = Card 0 2 "Courtyard" "..." [action a]
     where a = do plusCard 3
                  (self,h,_) <- getSHP
-                 cs <- askCards self h (UndrawBecause "courtyard") (1,1)
-                 deck self *<<@ cs
+                 deck self *<# askCards self h (UndrawBecause "courtyard") (1,1)
 
 greatHall :: Card
 greatHall = Card 0 3 "Great Hall" "..." [Victory, Score $ return.(1+),action a]
@@ -264,12 +248,12 @@ secretChamber = Card 0 2 "Secret Chamber" "..." [action act,Reaction react]
                                h <- getStack $ hand self
                                cs <- askCards self h
                                      (UndrawBecause "secret chamber") (2,2)
-                               deck self *<<@ cs
+                               deck self *<< cs
                                cont
           act = do (self,h,_) <- getSHP
                    cs <- askCards self h (DiscardBecause "secret chamber")
                          (0,length h)
-                   discard self *<<@ cs
+                   discard self *<< cs
                    plusCoin $ length cs
 
 -- Seaside cards
@@ -289,14 +273,13 @@ lookout :: Card
 lookout = Card 0 3 "Lookout" "..." [action a]
     where a = do self <- getSelf
                  plusAction 1
-                 cs3 <- catMaybes `fmap` (replicateM 3 $ top $ deck self)
+                 cs3 <-3<* deck self
                  -- if length cs < 3 then we go in order...
                  ct <- askCards self cs3 (TrashBecause "lookout") (1,1)
-                 trash *<<@ ct
+                 trash << ct
                  let cs2 = cs3 \\ ct
                  cd <- askCards self cs2 (DiscardBecause "lookout") (1,1)
-                 discard self *<<@ cd
-                 -- deck self *<<@ (cs2 \\ cd) -- move back to top...
+                 discard self *<< cd
 
 merchantShip :: Card
 merchantShip = Card 0 5 "Merchant Ship" "..." [duration a]
@@ -306,21 +289,18 @@ pearlDiver :: Card
 pearlDiver = Card 0 2 "Pearl Diver" "..." [action a]
     where a = do self <- getSelf
                  plusAction 1 >> plusCard 1
-                 mc <- peekBottom $ deck self
-                 case mc of
-                   Nothing -> return ()
-                   Just c -> do
-                     move <- askYN self $ "Move " ++ show c ++ " to top?"
-                     if move then deck self *<< c else deck self .<< c
+                 cs <-1<. deck self
+                 when (not $ null cs) $ do
+                   move <- askYN self $ "Move " ++ show (head cs) ++ " to top?"
+                   (if move then (*<<) else (.<<)) (deck self) cs
 
 salvager :: Card
 salvager = Card 0 4 "Salvager" "..." [action a]
     where a = do (self,h,price) <- getSHP
                  plusBuy 1
-                 ct <- askCards self h (TrashBecause "salvager") (1,1)
-                 forM_ ct $ \c -> do plusCoin $ price c
-                                     trash *<< c
-                                     
+                 trash <# mapM_ (plusCoin . price) #<#
+                       askCards self h (TrashBecause "salvager") (1,1)
+
 tactician :: Card
 tactician = Card 0 5 "Tactician" "..." [duration a]
     where a = do (self,h,_) <- getSHP
@@ -334,8 +314,8 @@ warehouse = Card 0 3 "Warehouse" "..." [action a]
     where a = do self <- getSelf
                  plusAction 1 >> draw 3 self
                  h <- getStack $ hand self
-                 cd <- askCards self h (DiscardBecause "warehouse") (3,3)
-                 discard self *<<@ cd
+                 discard self *<#
+                         askCards self h (DiscardBecause "warehouse") (3,3)
 
 wharf :: Card
 wharf = Card 0 5"Wharf" "..." [duration a]

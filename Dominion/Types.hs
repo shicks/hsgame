@@ -37,8 +37,6 @@ data GameState = GameState {
       _qIds        :: [QId]  -- [QId 0..]
     }
 
--- Plan: add a Bool for whether it's ordered or not, then -<< for
---       unordered add to put it in cID position.
 data StackName = SN String | SPId PId String
                  deriving ( Eq )
 
@@ -115,7 +113,8 @@ type Reaction = PId                       -- ^defender
 newtype PId = PId Int deriving ( Real, Integral, Num, Eq, Ord, Enum,
                                  Show, Read ) -- Player
 newtype QId = QId Int deriving ( Num, Eq, Ord, Enum, Show, Read ) -- Question
-newtype CId = CId Int deriving ( Num, Eq, Ord, Enum, Show, Read, Ix ) -- Card
+newtype CId = CId Int deriving ( Real, Integral, Num, Eq, Ord, Enum,
+                                 Show, Read, Ix ) -- Card
 
 data MessageToClient = Info InfoMessage
                      | Question QId QuestionMessage [Answer] (Int,Int)

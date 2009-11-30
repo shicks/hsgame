@@ -36,7 +36,7 @@ start ps c cs = do (chi,cho) <- pipe
     where allPlayers = map PId [0..length ps-1]
           fillDeck p = do es <- replicateM 3 (copyCard estate)
                           cs <- replicateM 7 (copyCard copper)
-                          discard p *<<@ (es++cs)
+                          discard p *<< es++cs
           emptyPlayer (i,(s,c)) = PlayerState i s c []
           emptyState chi cho =
               GameState (map emptyPlayer $ zip [0..] ps) (array (0,-1) [])
@@ -91,7 +91,7 @@ turn = do self <- gets currentTurn
           buys <- gets $ turnBuys . turnState
           --supply <- allSupply
           --tell self $ "Supply: " ++ show supply
-          buy self buys (coins + treasure) gain
+          buy self buys (coins + treasure)
           cleanup self
           -- next turn
           n <- gets $ length . gamePlayers
@@ -103,11 +103,11 @@ turn = do self <- gets currentTurn
                             cs <- askCards self as SelectAction (0,1)
                             when (not $ null cs) $ do
                               plusAction (-1)
-                              played *<<@ cs
+                              played << cs
                               getAction $ head cs
                               acts <- gets $ turnActions . turnState
                               when (acts > 0) $ actions self
-          buy self buys money gain
+          buy self buys money
               = do -- supply <- gets gameSupply
                    tell self $ "Buy: " ++ show money ++ " coins, "
                                ++ show buys ++ " buys"
@@ -116,11 +116,11 @@ turn = do self <- gets currentTurn
                    sup <- supplyCosting (<=money)
                    cs <- askCards self sup SelectBuy (0,1)
                    case cs of
-                     [c] -> do gain self c
+                     [c] -> do gain self discard *<< cs
                                when (buys>1) $
-                                    buy self (buys-1) (money - price c) gain
+                                    buy self (buys-1) (money - price c)
                      _ -> return ()
-          duration self = do played *<<< durations self
+          duration self = do played <<< durations self
                              withPlayer self (gets durationEffects)
                                             >>= sequence_
                              withPlayer self (modify $
