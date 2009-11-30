@@ -17,7 +17,6 @@ import Control.Monad.Trans ( liftIO )
 import System.Random ( randomRIO )
 
 data Stack = Stack {
-      stackName    :: String,
       modifyStack  :: ([Card] -> [Card]) -> Game (),
       getStack     :: Game [Card]
     }
@@ -110,16 +109,16 @@ draw n p = do replicateM_ n $ hand p .<<* deck p
               tell p $ "Drew cards: hand="++show (h::[Card]) -- improve...
 
 hand :: PId -> Stack
-hand = \p ->
-       Stack ("hand "++show p)
+hand p =
+       Stack
              (\f -> withPlayer p $ modify $
                     \s -> s { playerHand = f $ playerHand s })
              (withPlayer p $ gets playerHand)
 
 -- we've built in the reshuffling mechanism here...!
 deck :: PId -> Stack
-deck = \p ->
-       Stack ("deck "++show p)
+deck p =
+       Stack
        (\f -> withPlayer p $ modify $
               \s -> s { playerDeck = f $ playerDeck s }) $
        do h <- withPlayer p $ gets playerDeck
@@ -130,15 +129,15 @@ deck = \p ->
           return d'
 
 discard :: PId -> Stack
-discard = \p ->
-          Stack ("discard "++show p)
+discard p =
+          Stack
           (\f -> withPlayer p $ modify $
                  \s -> s { playerDiscard = f $ playerDiscard s })
           (withPlayer p $ gets playerDiscard)
 
 mat :: String -> PId -> Stack
-mat c = \p ->
-        Stack ("mat "++show p++" "++c)
+mat c p =
+        Stack
         (\f -> withPlayer p $ modify $
                \s -> s { playerMats = modifys c f $ playerMats s })
         (withPlayer p $ gets $ maybe [] id . lookup c . playerMats)
@@ -152,13 +151,13 @@ mats p = map (\m -> (m,mat m p)) `fmap`
 
 durations :: PId -> Stack
 durations = \p ->
-            Stack ("durations "++show p)
+            Stack
             (\f -> withPlayer p $ modify $
                    \s -> s { playerDuration = f $ playerDuration s })
             (withPlayer p $ gets playerDuration)
 
 played :: Stack
-played = Stack ("played")
+played = Stack
          (\f -> withTurn $ modify $
                 \s -> s { turnPlayed = f $ turnPlayed s })
          (gets $ turnPlayed . turnState)
