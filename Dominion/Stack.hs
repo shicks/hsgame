@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
 
 module Dominion.Stack ( Stack, (*<<), (.<<), (*<<&), (.<<&), (*<<@), (.<<@),
-                        getStack, top, bottom, trash,
+                        getStack, top, bottom, trash, shuffle, shuffleIO,
                         (.<<.), (.<<*), (*<<.), (*<<*), (.<<<), (*<<<),
                         draw, hand, deck, discard, mat, durations, played,
                         remove, defaultGain, allCards ) where
@@ -32,12 +32,15 @@ mod = modifyStack
 -- toBottom :: Stack -> Card -> Game ()
 
 shuffle :: [a] -> Game [a]
-shuffle []  = return []
-shuffle as = do i <- liftIO $ randomRIO (0,length as-1)
-                ((as!!i):) `fmap` shuffle (as!-i)
-    where [] !- _ = []
-          (a:as) !- 0 = as
-          (a:as) !- n = a:(as!-(n-1))
+shuffle as = liftIO $ shuffleIO as
+
+shuffleIO :: [a] -> IO [a]
+shuffleIO []  = return []
+shuffleIO as = do i <- randomRIO (0,length as-1)
+                  ((as!!i):) `fmap` shuffleIO (as\\i)
+    where [] \\ _ = []
+          (a:as) \\ 0 = as
+          (a:as) \\ n = a:(as\\(n-1))
 
 -- getStack :: Stack -> Game [Card]
 
@@ -191,7 +194,7 @@ remove' cs s = concat `fmap` mapM (r' (get s,mod s)) cs
 defaultGain :: PId -> Card -> Game ()
 defaultGain p c = do modify $ \s -> s { gameSupply = f (gameSupply s) }
                      c' <- copyCard c
-                     discard p *<< c
+                     discard p *<< c'
     where f [] = []
           f ((c',i):cs) | cardName c' == cardName c = (c',i-1):cs
                         | otherwise = (c',i):f cs
