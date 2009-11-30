@@ -1,7 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, MultiParamTypeClasses #-}
 
 module Dominion.Types ( GameState(..), PlayerState(..), Game,
-                        runGame, evalGame, execGame,
+                        runGame, evalGame, execGame, try,
                         GameError(),
                         withTurn, withPlayer, TurnState(..),
                         StackName(..),
@@ -43,6 +43,9 @@ evalGame g s = fst `fmap` runGame g s
 
 execGame :: Game a -> GameState -> IO GameState
 execGame g s = snd `fmap` runGame g s
+
+try :: Game a -> Game ()
+try a = catchError (a >> return ()) (\_ -> return ())
 
 instance Monad Game where
     return a = Game $ \s -> return (Right a,s)
