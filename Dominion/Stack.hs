@@ -23,9 +23,9 @@ import Data.Maybe ( listToMaybe )
 import Data.Ord ( comparing )
 
 data OStack = OStack { -- ordered stack
-      oAddToTop     :: [Card] -> Game (),
+      oAddToTop     :: [Card] -> Game (),  -- top is low
       oAddToBottom  :: [Card] -> Game (),
-      oGetStack     :: Int -> Game [Card]
+      oGetStack     :: Int -> Game [Card]  -- top is front
     }
 
 orderedStack :: StackName -> OStack
@@ -48,7 +48,7 @@ orderedStack sn = OStack { oAddToTop = att, oAddToBottom = atb,
                           updates = zipWith upd depths cs
                       modify $ \s -> s { gameCards = gameCards s//updates }
           gs' = (sortBy cmpfst . concatMap issn . elems) `fmap` gets gameCards
-          gs _ = (reverse . map snd) `fmap` gs'
+          gs _ = map snd `fmap` gs'
           cmpfst = comparing fst
           issn (st,x,c) = if st == sn then [(x,c)] else []
 

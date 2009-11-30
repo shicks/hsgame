@@ -5,8 +5,8 @@ import Dominion.Stack
 import Dominion.Attack
 import Dominion.Question
 
-import Control.Applicative ( pure, (<*>) )
-import Control.Monad.State ( gets, modify )
+import Control.Monad.State ( gets, modify, liftIO )
+import Control.Monad.Error ( catchError )
 import Control.Monad ( when, unless, join, replicateM, forM_  )
 import Data.Maybe ( listToMaybe, maybeToList, catMaybes, fromMaybe )
 import Data.List ( (\\), nubBy, partition )
