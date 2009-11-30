@@ -10,6 +10,8 @@ import TCP.Chan ( Input, Output, readInput, writeOutput, pipe )
 import Control.Monad ( forever, when, forM_ )
 import Control.Monad.State ( evalStateT, execStateT,
                              StateT, runStateT, put, get, modify, liftIO )
+import Data.List ( sortBy )
+import Data.Ord ( comparing )
 import Data.IORef ( newIORef, readIORef, writeIORef )
 import System.IO ( hFlush, stdout )
 import System.Environment ( getArgs )
@@ -119,9 +121,8 @@ server o i = do Message player1 _ N <- readInput i
                 (i2s, o2s) <- pipe
                 forkIO $ forever $ do Message _ _ (M m) <- readInput i
                                       writeOutput o2s m
-                state <- start [(player1,oplayer1),(player2,oplayer2)] i2s
-                         [secretChamber,chapel,cellar,village,remodel,
-                          smithy,militia,caravan,mine,market]
+                decks <- pickDecks
+                state <- start [(player1,oplayer1),(player2,oplayer2)] i2s decks
                 evalStateT play state >>= print
 
 main :: IO ()
@@ -134,15 +135,22 @@ main =
              runClientTCP hostname 12345 $ ioClient $ stdioClient name
          ["server"] ->
              runServerTCP 12345 $ ioServer server
-         _ -> do
+         _ -> twoPlayer
+
+pickDecks :: IO [Card]
+pickDecks = do let all = dominion ++ promos ++ intrigue ++ seaside
+               decks <- take 10 `fmap` shuffleIO all
+               return $ sortBy (comparing cardPrice) decks
+
+twoPlayer :: IO ()
+twoPlayer = do
           (c1i, c1o) <- pipe
           (c2i, c2o) <- pipe
           (cout_i, cout_o) <- pipe
           forkIO $ stdioClient "Alice" c1i cout_o
           forkIO $ stdioClient "Bob" c2i cout_o
-          state <- start [("Alice",c1o),("Bob",c2o)] cout_i
-                   [secretChamber,chapel,cellar,village,remodel,
-                    smithy,militia,caravan,mine,market]
+          decks <- pickDecks
+          state <- start [("Alice",c1o),("Bob",c2o)] cout_i decks
           evalStateT play state >>= print
 
 -- Crazy ideas
