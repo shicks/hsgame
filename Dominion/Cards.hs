@@ -9,9 +9,9 @@ import Control.Applicative ( pure, (<*>) )
 import Control.Monad.State ( gets, modify )
 import Control.Monad ( when, replicateM )
 import Data.Maybe ( listToMaybe, catMaybes )
+import Data.List ( nubBy )
 
-
-import Control.Monad.Trans ( liftIO ) -- for debugging!
+-- import Control.Monad.Trans ( liftIO ) -- for debugging!
 
 getSHGP :: Game (PId, [Card], PId -> Card -> Game (), Card -> Int) 
 getSHGP = do self <- gets currentTurn
@@ -25,11 +25,14 @@ affords :: Game (Int -> Card -> Bool)
 affords = do price <- withTurn $ gets turnPriceMod
              return $ \p c -> price c <= p 
 
+distinctSupplies :: Game [Card]
+distinctSupplies = nubBy samename `fmap` allSupply
+    where samename a b = cardName a == cardName b
+
 supplyCosting :: (Int -> Bool) -> Game [Card]
 supplyCosting f = do price <- withTurn $ gets turnPriceMod
-                     sup <- gets gameSupply
-                     return $ concat [if n>0 && f (price c)
-                                      then [c] else [] | (c,n) <- sup]
+                     sup <- distinctSupplies
+                     return $ filter (f . price) sup
 
 plusAction, plusBuy, plusCoin, plusCard :: Int -> Game ()
 plusAction a = withTurn $ modify $ \s -> s { turnActions = a + turnActions s }
@@ -150,7 +153,7 @@ thief = Card 0 4 "Thief" "..." [Action a]
                   case tc of
                     [c] -> do g <- ask1 self [Choose "Yes", Choose "No"] $
                                    OtherQuestion $ "Keep "++show c++"?"
-                              discard self *<< c
+                              when (g == Choose "Yes") $ discard self *<< c
                     _ -> return ()
 
 throneRoom :: Card

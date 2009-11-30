@@ -2,48 +2,42 @@
 
 module Dominion.Types ( GameState(..), PlayerState(..), Game,
                         withTurn, withPlayer, TurnState(..),
+                        StackName(..),
                         MessageToServer(..), RegisterQuestionMessage(..),
                         MessageToClient(..), ResponseFromClient(..),
                         Card(..), CardType(..),
                         Answer(..), pickCard,
                         CardDescription(..), describeCard, lookupCard,
                         QuestionMessage(..), InfoMessage(..),
-                        newQId, newCId, copyCard, getSelf,
+                        newQId, copyCard, getSelf,
                         Attack, Reaction,
                         QId, CId, PId(..) ) where
 
 import TCP.Chan ( ShowRead, Input, Output )
 import Control.Monad.State ( StateT, runStateT, gets, modify, liftIO )
 import Control.Monad ( when )
+import Data.Array ( Array, Ix, bounds, elems, listArray )
 
 type Game = StateT GameState IO
 
--- startGame :: ... -> IO ()
--- stateGame = do c <- newChan
---                forkIO $ readFrom c
---                GameState { inputChan = c }
-
 data GameState = GameState {
       gamePlayers  :: [PlayerState],
-      gameSupply   :: [(Card,Int)],
+      gameCards    :: Array CId (StackName, Integer, Card),
       currentTurn  :: PId,
       turnState    :: TurnState,
       hookGain     :: PId -> Card -> Game (),
       inputChan    :: Input MessageToServer,
       outputChan   :: Output RegisterQuestionMessage,
-      _qIds        :: [QId],  -- [QId 0..]
-      _cIds        :: [CId]   -- [CId 0..]
+      _qIds        :: [QId]  -- [QId 0..]
     }
+
+data StackName = SN String | SPId PId String
+                 deriving ( Eq )
 
 data PlayerState = PlayerState {
       playerId        :: PId,
       playerName      :: String,
       playerChan      :: Output MessageToClient,
-      playerHand      :: [Card],
-      playerDeck      :: [Card],
-      playerDiscard   :: [Card],
-      playerDuration  :: [Card],
-      playerMats      :: [(String,[Card])],
       durationEffects :: [Game ()]
     }
 
@@ -51,8 +45,7 @@ data TurnState = TurnState {
       turnActions  :: Int,
       turnBuys     :: Int,
       turnCoins    :: Int,
-      turnPriceMod :: Card -> Int,
-      turnPlayed   :: [Card]
+      turnPriceMod :: Card -> Int
 }
 
 data Card = Card {
@@ -65,8 +58,7 @@ data Card = Card {
 instance Eq Card where
     Card i _ _ _ _ == Card j _ _ _ _ = i==j
 instance Show Card where
-    show (Card id_ pr name text_ typ_) = show (pr,name)
-        -- '(':show pr++") "++name -- ++": "++text
+    show (Card id_ pr name text_ typ_) =name++" ("++show pr++")" -- ++": "++text
 data CardDescription =
  CardDescription { cid :: CId, cprice :: Int, cname :: String, ctext :: String }
                  deriving ( Eq, Show, Read )
@@ -113,7 +105,7 @@ type Reaction = PId                       -- ^defender
 newtype PId = PId Int deriving ( Real, Integral, Num, Eq, Ord, Enum,
                                  Show, Read ) -- Player
 newtype QId = QId Int deriving ( Num, Eq, Ord, Enum, Show, Read ) -- Question
-newtype CId = CId Int deriving ( Num, Eq, Ord, Enum, Show, Read ) -- Card
+newtype CId = CId Int deriving ( Num, Eq, Ord, Enum, Show, Read, Ix ) -- Card
 
 data MessageToClient = Info InfoMessage
                      | Question QId QuestionMessage [Answer] (Int,Int)
@@ -169,14 +161,13 @@ newQId = do qs <- gets _qIds
             modify $ \s -> s { _qIds = tail qs }
             return $ head qs
 
-newCId :: Game CId
-newCId = do cs <- gets _cIds
-            modify $ \s -> s { _cIds = tail cs }
-            return $ head cs
-
 copyCard :: Card -> Game Card
-copyCard c = do u <- newCId
-                return $ c { cardId = u }
+copyCard c = do cs <- gets gameCards
+                let (mn,mx) = bounds cs
+                    c' = c { cardId = mx+1 }
+                    cs' = listArray (mn,mx+1) (elems cs++[(SN "supply",0,c')])
+                modify $ \s -> s { gameCards = cs' }
+                return c'
 
 getSelf :: Game PId
 getSelf = gets currentTurn

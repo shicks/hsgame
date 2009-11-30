@@ -4,6 +4,7 @@ module Dominion.Stack ( Stack, (*<<), (.<<), (*<<&), (.<<&), (*<<@), (.<<@),
                         getStack, top, bottom, trash,
                         (.<<.), (.<<*), (*<<.), (*<<*), (.<<<), (*<<<),
                         draw, hand, deck, discard, mat, durations, played,
+                        allSupply, supplyCards,
                         remove, defaultGain, allCards ) where
 
 import Dominion.Types
@@ -15,11 +16,27 @@ import Control.Monad ( replicateM_ )
 import Control.Monad.State ( gets, modify )
 import Control.Monad.Trans ( liftIO )
 import System.Random ( randomRIO )
+import Data.Array ( Ix, Array, elems, (//) )
+import Data.List ( sortBy )
 
 data Stack = Stack {
       modifyStack  :: ([Card] -> [Card]) -> Game (),
       getStack     :: Game [Card]
     }
+
+anyStack :: StackName -> Stack
+anyStack sn = Stack { modifyStack = ms, getStack = gs }
+    where ms f = do new <- f `fmap` gs
+                    let upd depth c = (cardId c, (sn,depth,c))
+                        depths = [0..]
+                        updates = zipWith upd depths new
+                    modify $ \s -> s { gameCards = gameCards s//updates }
+          gs = (reverse . map snd . sortBy cmpfst .
+                        concatMap issn . elems) `fmap` gets gameCards
+          cmpfst x y = compare (fst x) (fst y)
+          issn (st,x,c) = if st == sn
+                          then [(x,c)]
+                          else []
 
 get :: Stack -> Game [Card]
 get = getStack
@@ -109,66 +126,37 @@ draw n p = do replicateM_ n $ hand p .<<* deck p
               tell p $ "Drew cards: hand="++show (h::[Card]) -- improve...
 
 hand :: PId -> Stack
-hand p =
-       Stack
-             (\f -> withPlayer p $ modify $
-                    \s -> s { playerHand = f $ playerHand s })
-             (withPlayer p $ gets playerHand)
+hand p = anyStack (SPId p "hand")
 
 -- we've built in the reshuffling mechanism here...!
 deck :: PId -> Stack
-deck p =
-       Stack
-       (\f -> withPlayer p $ modify $
-              \s -> s { playerDeck = f $ playerDeck s }) $
-       do h <- withPlayer p $ gets playerDeck
-          if not $ null h then return h else do
-          d <- get $ discard p
-          d' <- shuffle d
-          withPlayer p $ modify $ \s -> s { playerDeck=d', playerDiscard=[] }
-          return d'
+deck p = Stack ms0 gs
+    where Stack ms0 gs0 = anyStack (SPId p "deck")
+          gs = do x <- gs0
+                  if not (null x)
+                     then return x
+                     else do d <- get $ discard p
+                             d' <- shuffle d
+                             ms0 (const d')
+                             return d'
 
 discard :: PId -> Stack
-discard p =
-          Stack
-          (\f -> withPlayer p $ modify $
-                 \s -> s { playerDiscard = f $ playerDiscard s })
-          (withPlayer p $ gets playerDiscard)
+discard p = anyStack (SPId p "discard")
 
 mat :: String -> PId -> Stack
-mat c p =
-        Stack
-        (\f -> withPlayer p $ modify $
-               \s -> s { playerMats = modifys c f $ playerMats s })
-        (withPlayer p $ gets $ maybe [] id . lookup c . playerMats)
-    where modifys c f [] = [(c,f [])]
-          modifys c f ((c',x):ys) | c'==c     = (c',f x):ys
-                                  | otherwise = (c',x):modifys c f ys
-
-mats :: PId -> Game [(String,Stack)]
-mats p = map (\m -> (m,mat m p)) `fmap`
-         (withPlayer p $ gets $ map fst . playerMats)
+mat n p = anyStack (SPId p ("stack-"++n))
 
 durations :: PId -> Stack
-durations = \p ->
-            Stack
-            (\f -> withPlayer p $ modify $
-                   \s -> s { playerDuration = f $ playerDuration s })
-            (withPlayer p $ gets playerDuration)
+durations p = anyStack (SPId p "durations")
 
 played :: Stack
-played = Stack
-         (\f -> withTurn $ modify $
-                \s -> s { turnPlayed = f $ turnPlayed s })
-         (gets $ turnPlayed . turnState)
+played = anyStack (SN "turnPlayed")
 
 remove :: [Card] -> Stack -> Game ()
 remove cs s = mapM_ (\c -> mod s (rem c)) cs
     where rem c [] = []
           rem c (c':cs) | cardId c==cardId c' = cs
                         | otherwise = c':rem c cs
-
-
 
 -- *this is just a silly synonym for remove
 trash :: Card -> Stack -> Game ()
@@ -188,21 +176,22 @@ remove' cs s = concat `fmap` mapM (r' (get s,mod s)) cs
           rem c (c':cs) | cardId c==cardId c' = cs
                         | otherwise = c':rem c cs
 
+allSupply :: Game [Card]
+allSupply = (concatMap iss . elems) `fmap` gets gameCards
+    where iss (SN "supply",_,c) = [c]
+          iss _ = []
+
+supplyCards :: String -> Game [Card]
+supplyCards n = filter ((==n) . cardName) `fmap` allSupply
+
 defaultGain :: PId -> Card -> Game ()
-defaultGain p c = do modify $ \s -> s { gameSupply = f (gameSupply s) }
-                     c' <- copyCard c
-                     discard p *<< c'
-    where f [] = []
-          f ((c',i):cs) | cardName c' == cardName c = (c',i-1):cs
-                        | otherwise = (c',i):f cs
+defaultGain p c0 =
+    do cs <- supplyCards (cardName c0)
+       case cs of [] -> fail "cannot gain card with empty supply"
+                  c:_ -> discard p *<< c
 
 allCards :: PId -> Game [Card]
-allCards p = withPlayer p $ do
-               p' <- gets id
-               return $ playerHand p' ++ playerDeck p' ++ playerDiscard p'
-                        ++ playerDuration p' ++ concatMap snd (playerMats p')
-
--- allCards :: PId -> Game [Card]
--- allCards p = do xs <- mapM (\s -> get $ s p) [deck, hand, discard, durations]
---                 ys <- mapM (\s -> get $ snd s) =<< mats p
---                 return $ concat xs++concat ys
+allCards p = (concatMap isp . elems) `fmap` gets gameCards
+    where isp (st,_,c) = case st of
+                           SPId p' _ | p' == p -> [c]
+                           _ -> []
