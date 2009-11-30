@@ -54,10 +54,10 @@ shuffle as = liftIO $ shuffleIO as
 shuffleIO :: [a] -> IO [a]
 shuffleIO []  = return []
 shuffleIO as = do i <- randomRIO (0,length as-1)
-                  ((as!!i):) `fmap` shuffleIO (as\\i)
-    where [] \\ _ = []
-          (a:as) \\ 0 = as
-          (a:as) \\ n = a:(as\\(n-1))
+                  ((as!!i):) `fmap` shuffleIO (as!-i)
+    where [] !- _ = []
+          (a:as) !- 0 = as
+          (a:as) !- n = a:(as!-(n-1))
 
 -- getStack :: Stack -> Game [Card]
 
