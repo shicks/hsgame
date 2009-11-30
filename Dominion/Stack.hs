@@ -191,7 +191,7 @@ remove' cs s = concat `fmap` mapM (r' (get s,mod s)) cs
 defaultGain :: PId -> Card -> Game ()
 defaultGain p c = do modify $ \s -> s { gameSupply = f (gameSupply s) }
                      c' <- copyCard c
-                     discard p *<< c
+                     discard p *<< c'
     where f [] = []
           f ((c',i):cs) | cardName c' == cardName c = (c',i-1):cs
                         | otherwise = (c',i):f cs
