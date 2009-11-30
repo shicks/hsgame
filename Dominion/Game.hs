@@ -24,7 +24,7 @@ start ps c cs = do (chi,cho) <- pipe
                    (registeri, registero) <- pipe
                    forkIO $ forever $ do RQ a b <- readInput registeri
                                          writeOutput cho (RegisterQuestion a b)
-                   execStateT `flip` emptyState chi registero $ do
+                   execGame `flip` emptyState chi registero $ do
                      mapM_ fillDeck allPlayers
                      mapM_ (draw 5) allPlayers
                      mapM_ fillSupply cs
