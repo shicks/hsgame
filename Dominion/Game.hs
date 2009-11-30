@@ -9,9 +9,10 @@ import Control.Concurrent ( forkIO )
 import TCP.Chan ( Output, Input, pipe, readInput, writeOutput )
 import Control.Monad.State ( execStateT, modify, gets, liftIO )
 import Control.Monad ( replicateM, foldM, when, forever )
+import Data.Array ( array )
 
 newTurn :: TurnState
-newTurn = TurnState 1 1 0 cardPrice []
+newTurn = TurnState 1 1 0 cardPrice
 
 start :: [(String,Output MessageToClient)] -> Input ResponseFromClient
       -> [Card] -> IO GameState
@@ -36,13 +37,11 @@ start ps c cs = do (chi,cho) <- pipe
           fillDeck p = do es <- replicateM 3 (copyCard estate)
                           cs <- replicateM 7 (copyCard copper)
                           discard p *<<@ (es++cs)
-          emptyPlayer (i,(s,c)) = PlayerState i s c [] [] [] [] [] []
+          emptyPlayer (i,(s,c)) = PlayerState i s c []
           emptyState chi cho =
-              GameState (map emptyPlayer $ zip [0..] ps) []
-                            0 newTurn defaultGain chi cho [0..] [0..]
-          fillSupplyN n c' = do card <- copyCard c'
-                                modify $ \s -> s { gameSupply =
-                                                    (card,n):gameSupply s }
+              GameState (map emptyPlayer $ zip [0..] ps) (array (0,-1) [])
+                            0 newTurn defaultGain chi cho [0..]
+          fillSupplyN n c' = mapM_ copyCard (take n $ repeat c')
           vic = if length ps<3 then 8 else 12
           provs = if length ps<=4 then vic else 3*(length ps)
           fillSupply c' = fillSupplyN (if isVictory c' then vic else 10) c'
@@ -63,12 +62,12 @@ play = do winner <- endGame
           case winner of
             Just s -> return s
             Nothing -> turn >> play
-    where endGame = do sup <- gets gameSupply
+    where endGame = do provinces <- supplyCards "Province"
+                       sups <- distinctSupplies
                        np <- gets $ length . gamePlayers
                        let piles = if np>4 then 4 else 3
-                           empty = filter ((<=0).snd) sup
-                           prov = map snd $ filter (isProvince.fst) sup
-                           over = length empty >= piles || head prov <= 0
+                           over = null provinces ||
+                                  length sups <= 17 - piles -- FIXME CHECK THIS!
                        if not over then return Nothing else do
                        let ps = map fromIntegral [0..np-1]
                        names <- mapM (\p -> withPlayer p $ gets playerName) ps
@@ -91,8 +90,8 @@ turn = do self <- gets currentTurn
           treasure <- (sum . map getTreasure) `fmap` getStack (hand self)
           buys <- gets $ turnBuys . turnState
           gain <- gets hookGain
-          supply <- gets gameSupply
-          tell self $ "Supply: " ++ show supply
+          --supply <- allSupply
+          --tell self $ "Supply: " ++ show supply
           buy self buys (coins + treasure) gain
           cleanup self
           -- next turn

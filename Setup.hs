@@ -8,14 +8,11 @@ main = build [] $ do -- autoVersion Numbered
                                   requireModule "Data.List"
                      ghcFlags ["-threaded", -- "-Wall",
                                "-funbox-strict-fields","-O2"]
-                     package "yaml-simple" ["YAML"] []
                      executable "yell" "yell.hs" []
                      executable "echo" "echo.hs" []
-                     executable "testyaml" "testyaml.hs" []
                      executable "telnet" "telnet.hs" []
                      executable "chat" "chat.hs" []
                      executable "purechat" "purechat.hs" []
                      executable "named-chat" "named-chat.hs" []
                      executable "testdom" "testdom.hs" []
                      executable "lobby-chat" "lobby-chat.hs" []
-                     executable "yamltest" "yamltest.hs" []
