@@ -9,10 +9,18 @@ import Control.Applicative ( pure, (<*>) )
 import Control.Monad.State ( gets, modify )
 import Control.Monad ( when, unless, join, replicateM, forM_  )
 import Data.Maybe ( listToMaybe, catMaybes )
+||| add more cards, particularly seaside >>>
 import Data.List ( (\\) )
 
 
-import Control.Monad.Trans ( liftIO ) -- for debugging!
+
+<<< add more cards, particularly seaside |||
+||| rewrite card handling so each card can only ever be in one place. >>>
+
+<<< rewrite card handling so each card can only ever be in one place. |||
+import Data.List ( nubBy )
+
+-- import Control.Monad.Trans ( liftIO ) -- for debugging!
 
 gain :: PId -> Card -> Game ()
 gain p c = join $ (($c) . ($p)) `fmap` gets hookGain
@@ -28,15 +36,24 @@ affords :: Game (Int -> Card -> Bool)
 affords = do price <- withTurn $ gets turnPriceMod
              return $ \p c -> price c <= p 
 
+||| add more cards, particularly seaside >>>
 priceM :: Card -> Game Int
 priceM c = do price <- withTurn $ gets turnPriceMod
               return $ price c
 
+
+<<< add more cards, particularly seaside |||
+||| rewrite card handling so each card can only ever be in one place. >>>
+distinctSupplies :: Game [Card]
+distinctSupplies = nubBy samename `fmap` allSupply
+    where samename a b = cardName a == cardName b
+
+
+<<< rewrite card handling so each card can only ever be in one place. |||
 supplyCosting :: (Int -> Bool) -> Game [Card]
 supplyCosting f = do price <- withTurn $ gets turnPriceMod
-                     sup <- gets gameSupply
-                     return $ concat [if n>0 && f (price c)
-                                      then [c] else [] | (c,n) <- sup]
+                     sup <- distinctSupplies
+                     return $ filter (f . price) sup
 
 plusAction, plusBuy, plusCoin, plusCard :: Int -> Game ()
 plusAction a = withTurn $ modify $ \s -> s { turnActions = a + turnActions s }
@@ -185,7 +202,13 @@ thief = Card 0 4 "Thief" "..." [Action a]
                   discard opp *<<@ filter (not . (`elem`tc)) cs
                   case tc of
                     [c] -> do keep <- askYN self $ "Keep "++show c++"?"
-                              when keep $ discard self *<< c
+                              ||| add more cards, particularly seaside >>>
+when keep $ 
+<<< add more cards, particularly seaside |||
+||| rewrite card handling so each card can only ever be in one place. >>>
+when (g == Choose "Yes") $ 
+<<< rewrite card handling so each card can only ever be in one place. |||
+discard self *<< c
                     _ -> return ()
 
 throneRoom :: Card
