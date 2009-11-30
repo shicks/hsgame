@@ -18,6 +18,12 @@ import Control.Monad.State ( StateT, runStateT, gets, modify, liftIO )
 import Control.Monad ( when )
 import Data.Array ( Array, Ix, bounds, elems, listArray )
 
+-- Plan: throw in an ErrorT on the outside, so that we can use
+-- a "try" structure to catch pattern match errors:
+--   try :: (Monad m,Error e) => ErrorT e m a -> ErrorT e m (Either e a)
+--   try job = lift $ runErrorT job
+-- We could also rethrow anything that *isn't* a pattern match error...
+
 type Game = StateT GameState IO
 
 data GameState = GameState {
@@ -25,12 +31,14 @@ data GameState = GameState {
       gameCards    :: Array CId (StackName, Integer, Card),
       currentTurn  :: PId,
       turnState    :: TurnState,
-      hookGain     :: PId -> Card -> Game (),
+--      hookGain     :: PId -> Card -> Game (),  {- for embargo -> BUY -}
       inputChan    :: Input MessageToServer,
       outputChan   :: Output RegisterQuestionMessage,
       _qIds        :: [QId]  -- [QId 0..]
     }
 
+-- Plan: add a Bool for whether it's ordered or not, then -<< for
+--       unordered add to put it in cID position.
 data StackName = SN String | SPId PId String
                  deriving ( Eq )
 
@@ -39,6 +47,7 @@ data PlayerState = PlayerState {
       playerName      :: String,
       playerChan      :: Output MessageToClient,
       durationEffects :: [Game ()]
+--      gainedLastTurn  :: [Card]   {- for smugglers -}
     }
 
 data TurnState = TurnState {
@@ -46,6 +55,7 @@ data TurnState = TurnState {
       turnBuys     :: Int,
       turnCoins    :: Int,
       turnPriceMod :: Card -> Int
+--      turnCleanMod :: [Game ()]   {- for outpost/treasury -}
 }
 
 data Card = Card {
@@ -75,7 +85,7 @@ lookupCard d cs = do c:_ <- Just $ filter ((== cid d) . cardId) cs
                      Just c
 
 data CardType
-    = Action (Card -> Game ())
+    = Action (Card -> Maybe Card -> Game ())
     | Victory
     | Treasure Int
     | Reaction Reaction

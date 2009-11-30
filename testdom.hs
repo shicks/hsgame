@@ -86,7 +86,7 @@ stdioClient name = client (stateToPlayer status info answer "") name
           spaces = replicate ((40-length name)`div`2) ' '
           ints n [] = Just []
           ints n (s:ss) = case readsPrec 0 s of
-                            [(x,"")] | x <= n -> (x:) `fmap` ints n ss
+                            [(x,"")] | x <= n && x > 0 -> (x:) `fmap` ints n ss
                                      | otherwise -> Nothing
                             _ -> Nothing
           untilJust job = do ma <- job

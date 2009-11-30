@@ -1,11 +1,12 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
 
-module Dominion.Stack ( Stack, (*<<), (.<<), (*<<&), (.<<&), (*<<@), (.<<@),
-                        getStack, top, bottom, trash, shuffle, shuffleIO,
+module Dominion.Stack ( Stack, (*<<), (.<<),{- (*<<&), (.<<&),-} (*<<@), (.<<@),
                         (.<<.), (.<<*), (*<<.), (*<<*), (.<<<), (*<<<),
+                        getStack, top, bottom, trash, shuffle, shuffleIO,
                         draw, hand, deck, discard, mat, durations, played,
-                        allSupply, supplyCards,
-                        remove, defaultGain, allCards ) where
+                        allSupply, supplyCards, allCards,
+                        peekTop, peekBottom,
+                        remove, defaultGain, gain ) where
 
 import Dominion.Types
 import Dominion.Question
@@ -18,6 +19,7 @@ import Control.Monad.Trans ( liftIO )
 import System.Random ( randomRIO )
 import Data.Array ( Ix, Array, elems, (//) )
 import Data.List ( sortBy )
+import Data.Maybe ( listToMaybe )
 
 data Stack = Stack {
       modifyStack  :: ([Card] -> [Card]) -> Game (),
@@ -75,12 +77,21 @@ s .<< c = mod s (++[c])
 (.<<&) s1 (cs,s2) = do cs' <- remove' cs s2
                        s1 .<<@ cs'
 
--- these are unconditional adds
 (*<<@) :: Stack -> [Card] -> Game ()
-(*<<@) s = mapM_ (s*<<)
+(*<<@) s cs = mod s (cs++)
 
 (.<<@) :: Stack -> [Card] -> Game ()
-(.<<@) s = mapM_ (s.<<)
+(.<<@) s cs = mod s (++cs)
+
+-- try to use these exclusively, rather than top/bottom
+peekTop :: Stack -> Game (Maybe Card)
+peekTop s = listToMaybe `fmap` get s
+
+peekBottom :: Stack -> Game (Maybe Card)
+peekBottom s = last' `fmap` get s
+    where last' [x] = Just x
+          last' (x:xs) = last' xs
+          last' [] = Nothing
 
 top :: Stack -> Game (Maybe Card)
 top s = do cs <- get s
@@ -99,10 +110,10 @@ bottom s = do cs <- get s
 
 -- maybe return Game Bool?
 (.<<.), (.<<*), (*<<.), (*<<*) :: Stack -> Stack -> Game ()
-(.<<.) = moveCard (.<<) bottom
-(.<<*) = moveCard (.<<) top
-(*<<.) = moveCard (*<<) bottom
-(*<<*) = moveCard (*<<) top
+(.<<.) = moveCard (.<<) peekBottom
+(.<<*) = moveCard (.<<) peekTop
+(*<<.) = moveCard (*<<) peekBottom
+(*<<*) = moveCard (*<<) peekTop
 
 (.<<<), (*<<<) :: Stack -> Stack -> Game ()
 (.<<<) = moveAllCards (.<<)
@@ -155,15 +166,18 @@ durations p = anyStack (SPId p "durations")
 played :: Stack
 played = anyStack (SN "turnPlayed")
 
+trash :: Stack
+trash = anyStack $ SN "trash"
+
 remove :: [Card] -> Stack -> Game ()
 remove cs s = mapM_ (\c -> mod s (rem c)) cs
     where rem c [] = []
           rem c (c':cs) | cardId c==cardId c' = cs
                         | otherwise = c':rem c cs
 
--- *this is just a silly synonym for remove
-trash :: Card -> Stack -> Game ()
-trash c = remove [c]
+-- -- *this is just a silly synonym for remove
+-- trash :: Card -> Stack -> Game ()
+-- trash c = remove [c]
 
 -- *this is another version fo remove that tells what was
 -- successfully removed; we use it in (*<<&) so that only
@@ -192,6 +206,11 @@ defaultGain p c0 =
     do cs <- supplyCards (cardName c0)
        case cs of [] -> fail "cannot gain card with empty supply"
                   c:_ -> discard p *<< c
+
+-- gain :: PId -> Card -> Game ()
+-- gain p c = join $ (($c) . ($p)) `fmap` gets hookGain
+gain :: PId -> Card -> Game ()
+gain = defaultGain
 
 allCards :: PId -> Game [Card]
 allCards p = (concatMap isp . elems) `fmap` gets gameCards

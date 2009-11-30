@@ -27,12 +27,12 @@ start ps c cs = do (chi,cho) <- pipe
                    execStateT `flip` emptyState chi registero $ do
                      mapM_ fillDeck allPlayers
                      mapM_ (draw 5) allPlayers
-                     fillSupplyN (10*(length ps-1)) curse
-                     fillSupplyN provs province
-                     mapM_ fillSupply [duchy,estate]
-                     mapM_ (fillSupplyN 30) [gold,silver]
+                     mapM_ fillSupply cs
                      fillSupplyN 40 copper
-                     mapM_ fillSupply $ reverse cs
+                     mapM_ (fillSupplyN 30) [silver,gold]
+                     mapM_ fillSupply [estate,duchy]
+                     fillSupplyN provs province
+                     fillSupplyN (10*(length ps-1)) curse
     where allPlayers = map PId [0..length ps-1]
           fillDeck p = do es <- replicateM 3 (copyCard estate)
                           cs <- replicateM 7 (copyCard copper)
@@ -40,7 +40,7 @@ start ps c cs = do (chi,cho) <- pipe
           emptyPlayer (i,(s,c)) = PlayerState i s c []
           emptyState chi cho =
               GameState (map emptyPlayer $ zip [0..] ps) (array (0,-1) [])
-                            0 newTurn defaultGain chi cho [0..]
+                            0 newTurn {-defaultGain-} chi cho [0..]
           fillSupplyN n c' = mapM_ copyCard (take n $ repeat c')
           vic = if length ps<3 then 8 else 12
           provs = if length ps<=4 then vic else 3*(length ps)
@@ -89,7 +89,6 @@ turn = do self <- gets currentTurn
           coins <- gets $ turnCoins . turnState
           treasure <- (sum . map getTreasure) `fmap` getStack (hand self)
           buys <- gets $ turnBuys . turnState
-          gain <- gets hookGain
           --supply <- allSupply
           --tell self $ "Supply: " ++ show supply
           buy self buys (coins + treasure) gain
@@ -104,7 +103,7 @@ turn = do self <- gets currentTurn
                             cs <- askCards self as SelectAction (0,1)
                             when (not $ null cs) $ do
                               plusAction (-1)
-                              played *<<& (cs,hand self)
+                              played *<<@ cs
                               getAction $ head cs
                               acts <- gets $ turnActions . turnState
                               when (acts > 0) $ actions self
