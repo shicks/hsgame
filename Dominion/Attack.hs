@@ -1,5 +1,4 @@
-module Dominion.Attack ( attack, attackNow,
-                         opponents ) where
+module Dominion.Attack ( attack, attackNow ) where
 
 import Dominion.Types
 import Dominion.Question
@@ -12,11 +11,6 @@ isReaction c = not $ null [() | Reaction _ <- cardType c]
 
 getReaction :: Card -> Reaction -- unsafe!
 getReaction c = head [r | Reaction r <- cardType c]
-
-opponents :: Game [PId]
-opponents = do self <- getSelf
-               n <- gets $ length . gamePlayers
-               return $ filter (/=self) $ map PId [0..n-1]
 
 attack :: String -> Game (Attack -> Game ())
 attack name = do self <- getSelf

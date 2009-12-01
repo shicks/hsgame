@@ -1,3 +1,11 @@
+||| Merge spurious conflicts. >>>
+
+<<< Merge spurious conflicts. |||
+||| allow specifying cards on command line >>>
+{-# LANGUAGE PatternGuards #-}
+
+
+<<< allow specifying cards on command line |||
 import Dominion
 
 import TCP.Message ( Message(..) )
@@ -11,7 +19,8 @@ import TCP.Chan ( Input, Output, readInput, writeOutput, pipe )
 import Control.Monad ( forever, when, replicateM, forM_ )
 import Control.Monad.State ( evalStateT, execStateT,
                              StateT, runStateT, put, get, modify, liftIO )
-import Data.List ( sortBy )
+import Data.Char ( toLower, isSpace )
+import Data.List ( sortBy, (\\) )
 import Data.Ord ( comparing )
 import Data.IORef ( newIORef, readIORef, writeIORef )
 import System.IO ( hFlush, stdout )
@@ -31,8 +40,8 @@ client p n inc outc = handle p
     where handle p0 =
               do p1 <- serverStatus p0 "waiting on input from server..."
                  q <- readInput inc
-                 p2 <- serverStatus p1 "got input from server."
-                 p3 <- serverStatus p2 $ show q
+                 p3 <- serverStatus p1 "got input from server."
+                 -- p3 <- serverStatus p2 $ show q
                  case q of
                    Info m -> receiveInfo p3 m >>= handle
                    Question i m as (a0,a1) ->
@@ -173,62 +182,88 @@ randomBot = ioToPlayer status info answer
 botClient :: String -> Input MessageToClient -> Output ResponseFromClient -> IO ()
 botClient = client randomBot
                                  
-server :: Output (Message String MessageToClient)
+server :: [Card] -> Output (Message String MessageToClient)
        -> Input (Message String (ServerMessage ResponseFromClient))
        -> IO ()
-server o i = do Message player1 _ N <- readInput i
-                Message player2 _ N <- readInput i
-                (iplayer1, oplayer1) <- pipe
-                (iplayer2, oplayer2) <- pipe
-                forkIO $ forever $ readInput iplayer1 >>=
+server cs o i = do Message player1 _ N <- readInput i
+                   Message player2 _ N <- readInput i
+                   (iplayer1, oplayer1) <- pipe
+                   (iplayer2, oplayer2) <- pipe
+                   forkIO $ forever $ readInput iplayer1 >>=
                                       (writeOutput o . Message "server" player1)
-                forkIO $ forever $ readInput iplayer2 >>=
+                   forkIO $ forever $ readInput iplayer2 >>=
                                       (writeOutput o . Message "server" player2)
-                (i2s, o2s) <- pipe
-                forkIO $ forever $ do Message _ _ (M m) <- readInput i
-                                      writeOutput o2s m
-                decks <- pickDecks
-                state <- start [(player1,oplayer1),(player2,oplayer2)] i2s decks
-                evalGame play state >>= print
+                   (i2s, o2s) <- pipe
+                   forkIO $ forever $ do Message _ _ (M m) <- readInput i
+                                         writeOutput o2s m
+                   decks <- pickDecks cs
+                   state <- start [(player1,oplayer1),(player2,oplayer2)]
+                            i2s decks
+                   evalGame play state >>= print
 
 main :: IO ()
-main =
-    do args <- getArgs
-       case args of
+main = getArgs >>= mainArgs []
+
+mainArgs :: [Card] -> [String] -> IO ()
+mainArgs cs as
+    = case as of
          [name@('b':'o':'t':'2':_),hostname] ->
              runClientTCP hostname 12345 $ simpleNamedClient name $ ioClient $
                           client (weightedBot weights) name
-         [name@('b':'o':'t':_),hostname] ->
-             runClientTCP hostname 12345 $ simpleNamedClient name $ ioClient $
+        a:as' | [c] <- filter (\c -> map toLower a == filter (not.isSpace)
+                                   (map toLower $ cardName c)) allDecks
+                  -> mainArgs (c:cs) as'
+        [name@('b':'o':'t':_),hostname] ->
+            runClientTCP hostname 12345 $ simpleNamedClient name $ ioClient $
                           botClient name
-         [name,hostname] ->
-             runClientTCP hostname 12345 $ simpleNamedClient name $ ioClient $
+        [name,hostname] ->
+            runClientTCP hostname 12345 $ simpleNamedClient name $ ioClient $
                           stdioClient name
-         ["server"] ->
-             runServerTCP 12345 $ modifyServer (pickNames "client" "server") $
-                          ioServer server
-         _ -> twoPlayer
+        ["server"] ->
+            runServerTCP 12345 $ modifyServer (pickNames "client" "server") $
+                          ioServer (server cs)
+        _ -> twoPlayer cs
 
-pickDecks :: IO [Card]
-pickDecks = do let all = dominion ++ promos ++ intrigue ++ seaside
-                   sets = filter ((==10).length.snd)
+pickDecks :: [Card] -> IO [Card]
+pickDecks cs = do let all = dominion ++ promos ++ intrigue ++ seaside
+               ||| add recommended deck sets. >>>
+    sets = filter ((==10).length.snd)
                           (dominionSets++intrigueSets)
                r <- randomRIO (1,100)
-               decks <- if r > (10 :: Int)
-                        then take 10 `fmap` shuffleIO all
+               
+<<< add recommended deck sets. |||
+||| allow specifying cards on command line >>>
+       all' = all \\ cs
+                  
+<<< allow specifying cards on command line |||
+decks <- ||| add recommended deck sets. >>>
+if r > (10 :: Int)
+                        then 
+<<< add recommended deck sets. |||
+||| allow specifying cards on command line >>>
+(
+<<< allow specifying cards on command line |||
+take 10 . (cs++)) `fmap` shuffleIO ||| add recommended deck sets. >>>
+all
                         else do (sn,d) <- head `fmap` shuffleIO sets
                                 putStrLn ("Using set "++sn)
                                 return d
+
+<<< add recommended deck sets. |||
+||| allow specifying cards on command line >>>
+all'
+   
+<<< allow specifying cards on command line |||
                return $ sortBy (comparing cardPrice) decks
 
-twoPlayer :: IO ()
-twoPlayer = do
+twoPlayer :: [Card] -> IO ()
+twoPlayer cs = do
           (c1i, c1o) <- pipe
           (c2i, c2o) <- pipe
           (cout_i, cout_o) <- pipe
           forkIO $ stdioClient "Alice" c1i cout_o
           forkIO $ stdioClient "Bob" c2i cout_o
-          decks <- pickDecks
+          decks <- pickDecks cs
           state <- start [("Alice",c1o),("Bob",c2o)] cout_i decks
           evalGame play state >>= print
 

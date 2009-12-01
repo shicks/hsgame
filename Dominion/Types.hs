@@ -7,11 +7,13 @@ module Dominion.Types ( GameState(..), PlayerState(..), Game,
                         StackName(..),
                         MessageToServer(..), RegisterQuestionMessage(..),
                         MessageToClient(..), ResponseFromClient(..),
-                        Card(..), CardType(..),
+                        Card(..), CardType(..), HookType(..),
+                        runSetupHooks,
                         Answer(..), pickCard,
                         CardDescription(..), describeCard, lookupCard,
                         QuestionMessage(..), InfoMessage(..),
-                        newQId, copyCard, getSelf,
+                        newQId,
+                        getSelf, getLHO, getRHO, getOpponents, getAllPlayers,
                         Attack, Reaction,
                         QId, CId, PId(..) ) where
 
@@ -22,7 +24,7 @@ import Control.Monad.Error ( MonadError, Error(..),
                              catchError, throwError )
 import Control.Monad.Trans ( MonadIO, liftIO )
 import Control.Monad ( when )
-import Data.Array ( Array, Ix, bounds, elems, listArray )
+import Data.Array ( Array, Ix )
 
 -- Plan: throw in an ErrorT on the outside, so that we can use
 -- a "try" structure to catch pattern match errors:
@@ -78,7 +80,8 @@ data GameState = GameState {
       gameCards    :: Array CId (StackName, Integer, Card),
       currentTurn  :: PId,
       turnState    :: TurnState,
---      hookGain     :: PId -> Card -> Game (),  {- for embargo -> BUY -}
+--      hookGain     :: PId -> Card -> Game (),  {- for smuggler -}
+--      hookBuy      :: PId -> Card -> Game (),  {- for embargo, treasury -}
       inputChan    :: Input MessageToServer,
       outputChan   :: Output RegisterQuestionMessage,
       _qIds        :: [QId]  -- [QId 0..]
@@ -92,15 +95,19 @@ data PlayerState = PlayerState {
       playerName      :: String,
       playerChan      :: Output MessageToClient,
       durationEffects :: [Game ()]
---      gainedLastTurn  :: [Card]   {- for smugglers -}
     }
 
 data TurnState = TurnState {
       turnActions  :: Int,
       turnBuys     :: Int,
       turnCoins    :: Int,
-      turnPriceMod :: Card -> Int
---      turnCleanMod :: [Game ()]   {- for outpost/treasury -}
+      priceMod     :: Card -> Int,
+      treasureMod  :: Card -> Int,
+      cleanupHooks :: [Game () -> Game ()]
+        -- ORDERED: treasury first, then outpost
+        -- outpost needs to know how to take another turn
+        -- treasury needs to know whether we bought a victory... :-/
+        -- embargo also piggybacks only on buys, so these can go together.
 }
 
 data Card = Card {
@@ -135,6 +142,7 @@ data CardType
     | Treasure Int
     | Reaction Reaction
     | Score (Int -> Game Int)
+    | Hook HookType
 
 instance Show CardType where
     show (Action _) = "Action"
@@ -142,6 +150,11 @@ instance Show CardType where
     show (Treasure n) = "Treasure"
     show (Reaction _) = "Reaction"
     show _ = ""
+
+data HookType = SetupHook ([Card] -> Game ())
+
+runSetupHooks :: [Card] -> Card -> Game ()
+runSetupHooks cs c = mapM_ ($cs) [g | Hook (SetupHook g) <- cardType c]
 
 -- *How to actually perform the attack.  This is slightly tricky, since
 -- some attacks depend on choices made by attacker...
@@ -181,7 +194,7 @@ instance ShowRead ResponseFromClient
 data InfoMessage = InfoMessage String        deriving ( Show, Read )
 data QuestionMessage
     = SelectAction | SelectReaction String           -- from hand
-    | SelectSupply String | SelectBuy | SelectGain   -- from supply
+    | SelectSupply String | SelectBuys | SelectGain  -- from supply
     | DiscardBecause String | UndrawBecause String   -- maybe Card instead?
     | TrashBecause String
     | OtherQuestion String                           -- e.g. envoy?
@@ -217,24 +230,24 @@ newQId = do qs <- gets _qIds
             modify $ \s -> s { _qIds = tail qs }
             return $ head qs
 
-copyCard :: Card -> Game Card
-copyCard c = do cs <- gets gameCards
-                let (mn,mx) = bounds cs
-                    c' = c { cardId = mx+1 }
-                    cs' = listArray (mn,mx+1) (elems cs++[(SN "supply",0,c')])
-                modify $ \s -> s { gameCards = cs' }
-                return c'
-
 getSelf :: Game PId
 getSelf = gets currentTurn
 
-left :: PId -> Game PId
-left p = do n <- gets $ length . gamePlayers
-            return $ (p+PId 1) `mod` PId n
+getLHO :: PId -> Game PId
+getLHO p = do n <- gets $ length . gamePlayers
+              return $ (p+PId 1) `mod` PId n
 
-right :: PId -> Game PId
-right p = do n <- gets $ length . gamePlayers
-             return $ (p+PId n-PId 1) `mod` PId n
+getRHO :: PId -> Game PId
+getRHO p = do n <- gets $ length . gamePlayers
+              return $ (p+PId n-PId 1) `mod` PId n
+
+getOpponents :: PId -> Game [PId]
+getOpponents p = do n <- gets $ length . gamePlayers
+                    return $ filter (/=p) $ map PId [0..n-1]
+
+getAllPlayers :: Game [PId]
+getAllPlayers = do n <- gets $ length . gamePlayers
+                   return $ map PId [0..n-1]
 
 fromPId :: PId -> Game PlayerState
 fromPId p = withPlayer p $ gets id

@@ -12,7 +12,7 @@ import Control.Monad ( replicateM, foldM, when, forever )
 import Data.Array ( array )
 
 newTurn :: TurnState
-newTurn = TurnState 1 1 0 cardPrice
+newTurn = TurnState 1 1 0 cardPrice faceValue []
 
 start :: [(String,Output MessageToClient)] -> Input ResponseFromClient
       -> [Card] -> IO GameState
@@ -27,24 +27,24 @@ start ps c cs = do (chi,cho) <- pipe
                    execGame `flip` emptyState chi registero $ do
                      mapM_ fillDeck allPlayers
                      mapM_ (draw 5) allPlayers
-                     mapM_ fillSupply cs
-                     fillSupplyN 40 copper
-                     mapM_ (fillSupplyN 30) [silver,gold]
-                     mapM_ fillSupply [estate,duchy]
-                     fillSupplyN provs province
-                     fillSupplyN (10*(length ps-1)) curse
+                     mapM_ (runSetupHooks cs) cs
+                     let sup = concatMap copy cs ++ replicate 40 copper
+                               ++ concatMap (replicate 30) [silver,gold]
+                               ++ concatMap copy [estate,duchy]
+                               ++ replicate provs province
+                               ++ replicate (10*(length ps-1)) curse
+                     addCards sup
+                     return ()
     where allPlayers = map PId [0..length ps-1]
-          fillDeck p = do es <- replicateM 3 (copyCard estate)
-                          cs <- replicateM 7 (copyCard copper)
-                          discard p *<< es++cs
+          fillDeck p = discard p *<#
+                       addCards (replicate 3 estate ++ replicate 7 copper)
           emptyPlayer (i,(s,c)) = PlayerState i s c []
           emptyState chi cho =
               GameState (map emptyPlayer $ zip [0..] ps) (array (0,-1) [])
                             0 newTurn {-defaultGain-} chi cho [0..]
-          fillSupplyN n c' = mapM_ copyCard (take n $ repeat c')
+          copy cd = replicate (if isVictory cd then vic else 10) cd
           vic = if length ps<3 then 8 else 12
           provs = if length ps<=4 then vic else 3*(length ps)
-          fillSupply c' = fillSupplyN (if isVictory c' then vic else 10) c'
           respond ch rs = do r <- readInput ch
                              case r of
                                AnswerFromClient q as -> do
@@ -88,20 +88,20 @@ play = do winner <- endGame
                            
 turn :: Game ()
 turn = do self <- gets currentTurn
-          modify $ \s -> s { turnState = newTurn }
-          duration self
-          actions self
-          coins <- gets $ turnCoins . turnState
-          treasure <- (sum . map getTreasure) `fmap` getStack (hand self)
-          buys <- gets $ turnBuys . turnState
-          --supply <- allSupply
-          --tell self $ "Supply: " ++ show supply
-          buy self buys (coins + treasure)
-          cleanup self
-          -- next turn
+          doTurn self
           n <- gets $ length . gamePlayers
           modify $ \s -> s { currentTurn = (self+PId 1)`mod`(PId n) }
-    where actions self = do h <- getStack $ hand self
+    where doTurn self = do modify $ \s -> s { turnState = newTurn }
+                           duration self
+                           actions self
+                           coins <- gets $ turnCoins . turnState
+                           treasure <- sum `fmap` (mapM getTreasure =<<
+                                                   getStack (hand self))
+                           buys <- gets $ turnBuys . turnState
+                           -- tell self . ("Supply: "++) . show =<< allSupply
+                           buy self buys (coins + treasure)
+                           cleanup self
+          actions self = do h <- getStack $ hand self
                             a <- withTurn $ gets turnActions
                             tell self $ "Actions ("++show a++"): hand="++show h
                             let as = filter (isAction) h
@@ -117,17 +117,20 @@ turn = do self <- gets currentTurn
                    tell self $ "Buy: " ++ show money ++ " coins, "
                                ++ show buys ++ " buys"
                    -- tell self $ "  supply=" ++ show supply
-                   price <- gets $ turnPriceMod . turnState
+                   price <- withTurn $ gets priceMod
                    sup <- supplyCosting (<=money)
-                   try $ do
-                     [c] <- askCards self sup SelectBuy (0,1)
-                     gain self discard *<< [c]
-                     when (buys>1) $ buy self (buys-1) (money - price c)
-          duration self = do played <<< durations self
+                   cs <- askCards' self sup SelectBuys (0,buys)
+                   totalCost <- sum `fmap` mapM priceM cs
+                   if totalCost <= money then gain self discard *<< cs
+                                         else buy self buys money
+          duration self = do prevDuration <<< durations self
                              withPlayer self (gets durationEffects)
                                             >>= sequence_
                              withPlayer self (modify $
                                             \s -> s { durationEffects = [] })
-          cleanup self = do discard self *<<< played
-                            discard self *<<< hand self
+          cleanupStacks self = do discard self *<<< played
+                                  discard self *<<< prevDuration
+                                  discard self *<<< hand self
+          cleanup self = do let rep = cleanupStacks self >> doTurn self
+                            mapM_ ($rep) =<< withTurn (gets cleanupHooks)
                             draw 5 self
