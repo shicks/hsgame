@@ -18,23 +18,22 @@ import Data.Function ( on )
 getSHP :: Game (PId, [Card], Card -> Int) 
 getSHP = do self <- gets currentTurn
             h <- getStack $ hand self
-            price <- withTurn $ gets turnPriceMod
+            price <- withTurn $ gets priceMod
             return (self,h,price)
 
 -- helper functions
 affords :: Game (Int -> Card -> Bool)
-affords = do price <- withTurn $ gets turnPriceMod
+affords = do price <- withTurn $ gets priceMod
              return $ \p c -> price c <= p 
 
 priceM :: Card -> Game Int
-priceM c = do price <- withTurn $ gets turnPriceMod
-              return $ price c
+priceM c = do withTurn $ ($c) `fmap` gets priceMod
 
 distinctSupplies :: Game [Card]
 distinctSupplies = nubBy sameName `fmap` allSupply
 
 supplyCosting :: (Int -> Bool) -> Game [Card]
-supplyCosting f = do price <- withTurn $ gets turnPriceMod
+supplyCosting f = do price <- withTurn $ gets priceMod
                      sup <- distinctSupplies
                      return $ filter (f . price) sup
 
@@ -84,8 +83,8 @@ dominion = [adventurer, bureaucrat, cellar, chancellor, chapel,
 promos :: [Card]
 promos = [blackMarket, envoy]
 
-intrigue :: [Card]  -- coppersmith
-intrigue = [baron, bridge, conspirator, courtyard,
+intrigue :: [Card]
+intrigue = [baron, bridge, conspirator, coppersmith, courtyard,
             duke, greatHall, harem, ironworks, masquerade,
             miningVillage, minion, nobles, pawn, saboteur,
             scout, secretChamber, shantyTown, steward,
@@ -101,14 +100,15 @@ allDecks = dominion ++ promos ++ intrigue ++ seaside
 
 -- cards themselves
 adventurer :: Card
-adventurer = Card 0 6 "Adventurer" "..." [action $ try $ dig 0 ]
-    where dig 2 = return ()
+adventurer = Card 0 6 "Adventurer" "..." [action $ getSelf >>= a ]
+    where a self = finally (dig 0) $ discard self *<<< aside
+          dig 2 = return ()
           dig n = do self <- getSelf
                      [c] <-1<* deck self
                      if isTreasure c
                         then do hand self << [c]
                                 dig (n+1)
-                        else do discard self *<< [c]
+                        else do aside << [c]
                                 dig n
 
 bureaucrat :: Card
@@ -273,7 +273,7 @@ village = Card 0 3 "Village" "..." $ [action $ plusABCD 2 0 0 1]
 witch :: Card
 witch = Card 0 5 "Witch" "..." [action a]
     where a = do plusCard 2
-                 attackNow "witch" $ \_ opp -> gain opp discard *<< [curse]
+                 attackNow "witch" $ \_ o -> try $ gain o discard *<< [curse]
 
 woodcutter :: Card
 woodcutter = Card 0 3 "Woodcutter" "..." [action $ plusABCD 0 1 2 0]
@@ -296,8 +296,8 @@ blackMarket = Card 0 3 "Black Market" "..." [Hook (SetupHook setup), action a]
           a = do (self,h,price) <- getSHP
                  plusCoin 2
                  coins <- withTurn $ gets turnCoins
-                 let treasure = sum $ map getTreasure h -- mapM...
-                 let money = coins + sum (map getTreasure h)
+                 treasure <- sum `fmap` mapM getTreasure h
+                 let money = coins+treasure
                  cs <-3<* bmDeck
                  tell self $ "Current money: "++show money
                  let f = do
@@ -311,7 +311,7 @@ blackMarket = Card 0 3 "Black Market" "..." [Hook (SetupHook setup), action a]
                              (OtherQuestion $ "play treasures"++needed)
                              (0,length h)
                        -- we might try to make these more atomic...?
-                       plusCoin $ sum $ map getTreasure ts
+                       plusCoin =<< sum `fmap` mapM getTreasure ts
                        played << ts
                        coins' <- withTurn $ gets turnCoins
                        if cost <= coins'
@@ -340,17 +340,17 @@ baron :: Card
 baron = Card 0 4 "Baron" "..." [action a]
     where a = do self <- getSelf
                  plusBuy 1
-                 catchError `flip` (\_ -> gain self discard *<< [estate]) $ do
+                 catchError `flip` (\_ -> gainEstate self) $ do
                    e:_ <- filter (sameName estate) `fmap` getStack (hand self)
                    True <- askYN self "Discard estate?"
                    discard self *<< [e]
                    plusCoin 4
+          gainEstate self = try $ gain self discard *<< [estate]
 
 bridge :: Card
 bridge = Card 0 4 "Bridge" "..." [action a]
     where a = do plusABCD 0 1 1 0
-                 withTurn $ modify $ \s -> s { turnPriceMod
-                                                   = dec . turnPriceMod s }
+                 withTurn $ modify $ \s -> s { priceMod = dec . priceMod s }
           dec x | x<=0      = 0
                 | otherwise = x-1
 
@@ -359,6 +359,12 @@ conspirator = Card 0 4 "Conspirator" "..." [action a]
     where a = try $ do plusCoin 2
                        _:_:_ <- filter isAction `fmap` getStack played
                        plusABCD 1 0 0 1
+
+coppersmith :: Card
+coppersmith = Card 0 4 "Coppersmith" "..." [action a]
+    where a = withTurn $ modify $ \s -> s { treasureMod = f $ treasureMod s }
+          f old c | sameName c copper = 1 + old c
+                  | otherwise         = old c
 
 courtyard :: Card
 courtyard = Card 0 2 "Courtyard" "..." [action a]
@@ -513,7 +519,7 @@ torturer :: Card
 torturer = Card 0 5 "Torturer" "..." [action a]
     where a = do plusCard 3 -- this attack may not be parallelizable
                  attackNow "torturer" $ \_ opp -> try $ do
-                   let curs = gain opp hand << [curse]
+                   let curs = try $ gain opp hand << [curse]
                        disc = forceDiscard "torturer" opp 2
                    h <- getStack $ hand opp
                    c <- length `fmap` supplyCards (cardName curse)
@@ -652,8 +658,11 @@ isVictory c = not $ null [() | Victory <- cardType c]
 isTreasure :: Card -> Bool
 isTreasure c = not $ null [() | Treasure _ <- cardType c]
 
-getTreasure :: Card -> Int -- this needs to be monadic: coppersmith!
-getTreasure c = sum [t | Treasure t <- cardType c] 
+getTreasure :: Card -> Game Int
+getTreasure c = withTurn $ ($c) `fmap` gets treasureMod
+
+faceValue :: Card -> Int
+faceValue c = sum [t | Treasure t <- cardType c] 
 
 isAction :: Card -> Bool
 isAction c = not $ null [() | Action _ <- cardType c]

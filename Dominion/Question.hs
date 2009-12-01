@@ -65,15 +65,23 @@ askMC2 p ss s = do (a,a') <- ask2 p (map (Choose . fst) ss) $
 
 -- *simple question with list of cards: choose between m and n
 askCards :: PId -> [Card] -> QuestionMessage -> (Int,Int) -> Game [Card]
-askCards _ [] _ _ = return [] -- no cards -> no cards
-askCards p cs q (mn,mx) =
+askCards = askCardsRepl $ \c -> filter (/= c)
+
+askCards' :: PId -> [Card] -> QuestionMessage -> (Int,Int) -> Game [Card]
+askCards' = askCardsRepl (const id)
+
+askCardsRepl :: (Card -> [Card] -> [Card]) -- filter out card from list
+             -> PId -> [Card] -> QuestionMessage -> (Int,Int) -> Game [Card]
+askCardsRepl _ _ [] _ _ = return [] -- no cards -> no cards
+askCardsRepl filt p cs q (mn,mx) =
     do och <- withPlayer p $ gets playerChan
        ich <- gets outputChan
        qid <- newQId
+       cs' <- mapM fixPrice cs
        liftIO $ do
          mv <- newEmptyMVar
          let go = writeOutput och $
-                  Question qid q (map pickCard cs) (realMin,realMax)
+                  Question qid q (map pickCard cs') (realMin,realMax)
              verify mv as | length as > realMax = go >> return False
                           | length as < realMin = go >> return False
                           | test as cs = do putMVar mv $ catMaybes $
@@ -88,6 +96,8 @@ askCards p cs q (mn,mx) =
           test [] _ = True -- as is subset of cs (unordered)
           test (PickCard cd:as) cs =
               case lookupCard cd cs of
-                Just c -> test as (filter (/= c) cs)
+                Just c -> test as $ filt c cs
                 Nothing -> False
           unCard a = case a of { PickCard c -> c; _ -> error "impossible" }
+          fixPrice c = do p <- withTurn $ gets priceMod
+                          return $ c { cardPrice = p c }

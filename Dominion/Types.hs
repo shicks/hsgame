@@ -101,7 +101,9 @@ data TurnState = TurnState {
       turnActions  :: Int,
       turnBuys     :: Int,
       turnCoins    :: Int,
-      turnPriceMod :: Card -> Int
+      priceMod     :: Card -> Int,
+      treasureMod  :: Card -> Int,
+      cleanupHooks :: [Game ()]
 --      turnCleanMod :: [Game ()]   {- for outpost/treasury -}
 }
 
@@ -189,7 +191,7 @@ instance ShowRead ResponseFromClient
 data InfoMessage = InfoMessage String        deriving ( Show, Read )
 data QuestionMessage
     = SelectAction | SelectReaction String           -- from hand
-    | SelectSupply String | SelectBuy | SelectGain   -- from supply
+    | SelectSupply String | SelectBuys | SelectGain  -- from supply
     | DiscardBecause String | UndrawBecause String   -- maybe Card instead?
     | TrashBecause String
     | OtherQuestion String                           -- e.g. envoy?

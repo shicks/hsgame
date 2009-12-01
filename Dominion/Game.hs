@@ -12,7 +12,7 @@ import Control.Monad ( replicateM, foldM, when, forever )
 import Data.Array ( array )
 
 newTurn :: TurnState
-newTurn = TurnState 1 1 0 cardPrice
+newTurn = TurnState 1 1 0 cardPrice faceValue []
 
 start :: [(String,Output MessageToClient)] -> Input ResponseFromClient
       -> [Card] -> IO GameState
@@ -87,7 +87,7 @@ turn = do self <- gets currentTurn
           duration self
           actions self
           coins <- gets $ turnCoins . turnState
-          treasure <- (sum . map getTreasure) `fmap` getStack (hand self)
+          treasure <- sum `fmap` (mapM getTreasure =<< getStack (hand self))
           buys <- gets $ turnBuys . turnState
           --supply <- allSupply
           --tell self $ "Supply: " ++ show supply
@@ -112,12 +112,12 @@ turn = do self <- gets currentTurn
                    tell self $ "Buy: " ++ show money ++ " coins, "
                                ++ show buys ++ " buys"
                    -- tell self $ "  supply=" ++ show supply
-                   price <- gets $ turnPriceMod . turnState
+                   price <- withTurn $ gets priceMod
                    sup <- supplyCosting (<=money)
-                   try $ do
-                     [c] <- askCards self sup SelectBuy (0,1)
-                     gain self discard *<< [c]
-                     when (buys>1) $ buy self (buys-1) (money - price c)
+                   cs <- askCards' self sup SelectBuys (0,buys)
+                   totalCost <- sum `fmap` mapM priceM cs
+                   if totalCost <= money then gain self discard *<< cs
+                                         else buy self buys money
           duration self = do played <<< durations self
                              withPlayer self (gets durationEffects)
                                             >>= sequence_
