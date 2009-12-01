@@ -14,8 +14,7 @@ tell p s = do och <- withPlayer p $ gets playerChan
 -- *simple question with list of answers: choose 1
 ask1 :: PId -> [Answer] -> QuestionMessage -> Game Answer
 ask1 p [] _ = fail "ask1 requires nonempty choices"
-ask1 p as q = do liftIO $ putStrLn $ "ask1: p="++show p
-                 och <- withPlayer p $ gets playerChan
+ask1 p as q = do och <- withPlayer p $ gets playerChan
                  ich <- gets outputChan
                  qid <- newQId
                  liftIO $ do
@@ -39,8 +38,7 @@ askYN p s = do a <- ask1 p [Choose "Yes",Choose "No"] $ OtherQuestion s
 askCards :: PId -> [Card] -> QuestionMessage -> (Int,Int) -> Game [Card]
 askCards _ [] _ _ = return [] -- no cards -> no cards
 askCards p cs q (mn,mx) =
-    do liftIO $ putStrLn $ "askCards: p="++show p
-       och <- withPlayer p $ gets playerChan
+    do och <- withPlayer p $ gets playerChan
        ich <- gets outputChan
        qid <- newQId
        liftIO $ do

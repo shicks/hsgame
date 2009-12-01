@@ -77,7 +77,7 @@ dominion = [adventurer, bureaucrat, cellar, chancellor, chapel,
             witch, woodcutter, workshop]
 
 promos :: [Card]
-promos = []
+promos = [blackMarket, envoy]
 
 intrigue :: [Card]
 intrigue = [courtyard, greatHall, harem, secretChamber]
@@ -96,8 +96,10 @@ adventurer = Card 0 6 "Adventurer" "..." [action $ try $ dig 0 ]
           dig n = do self <- getSelf
                      [c] <-1<* deck self
                      if isTreasure c
-                        then hand self << [c] >> dig (n+1)
-                        else discard self *<< [c] >> dig n
+                        then do hand self << [c]
+                                dig (n+1)
+                        else do discard self *<< [c]
+                                dig n
 
 bureaucrat :: Card
 bureaucrat = Card 0 4 "Bureaucrat" "..." [action a]
@@ -134,8 +136,7 @@ chapel = Card 0 2 "Chapel" "Trash up to 4 cards from your hand" [action a]
 councilRoom :: Card
 councilRoom = Card 0 5 "Council Room" "..." [action a]
     where a = do plusCard 4
-                 opp <- opponents
-                 forM_ opp $ draw 1
+                 getSelf >>= getOpponents >>= mapM_ (draw 1)
 
 feast :: Card
 feast = Card 0 4 "Feast" "Trash this card.  Gain a card costing up to 5"
@@ -221,13 +222,14 @@ spy :: Card
 spy = Card 0 4 "Spy" "..." [action a]
     where a = do self <- getSelf
                  plusAction 1 >> plusCard 1
-                 spy self self
-                 attackNow "spy" spy
-          spy self p = try $ do [c] <-1<* deck p
-                                pname <- withPlayer p $ gets playerName
-                                kill <- askYN self $ "(Player "++pname
-                                        ++"): Discard "++show c++"?"
-                                when kill $ discard p *<< [c]
+                 spy (\_ -> "Self") self self
+                 attackNow "spy" $ spy ("Opponent "++)
+          spy fmt self p = try $ do
+                               [c] <-1<* deck p
+                               who <- withPlayer p $ fmt `fmap` gets playerName
+                               kill <- askYN self $ "("++who
+                                       ++"): Discard "++show c++"?"
+                               when kill $ discard p *<< [c]
 
 thief :: Card
 thief = Card 0 4 "Thief" "..." [action a]
@@ -257,6 +259,9 @@ throneRoom = Card 0 4 "Throne Room" "..." [Action a]
                                  getAction c
                                  getActionPred (fromMaybe this pred) c
 
+village :: Card
+village = Card 0 3 "Village" "..." $ [action $ plusABCD 2 0 0 1]
+
 witch :: Card
 witch = Card 0 5 "Witch" "..." [action a]
     where a = do plusCard 2
@@ -271,9 +276,55 @@ workshop = Card 0 3 "Workshop" "..." [action a]
                  sup <- supplyCosting (<=4)
                  gain self discard *<# askCards self sup SelectGain (1,1)
 
-village :: Card
-village = Card 0 3 "Village" "..." $ [action $ plusABCD 2 0 0 1]
 
+-- *Promo cards
+blackMarket :: Card
+blackMarket = Card 0 3 "Black Market" "..." [Hook (SetupHook setup), action a]
+    where bmDeck = orderedStack $ SN "blackMarket"
+          notIn cs c = not $ cardName c `elem` map cardName cs
+          setup cs = bmDeck *<# addCards =<< mapM runHook =<<
+                                shuffle (filter (notIn cs) allDecks)
+              where runHook c = runSetupHooks cs c >> return c
+          a = do (self,h,price) <- getSHP
+                 plusCoin 2
+                 coins <- withTurn $ gets turnCoins
+                 let treasure = sum $ map getTreasure h -- mapM...
+                 let money = coins + sum (map getTreasure h)
+                 cs <-3<* bmDeck
+                 tell self $ "Current money: "++show money
+                 let f = do
+                       [c] <- askCards self (filter (\c->price c<=money) cs)
+                              (OtherQuestion "black market buy") (0,1)
+                       let cost = price c
+                           needed = if cost>coins
+                                    then " (need "++show (cost-coins)++" more)"
+                                    else ""
+                       ts <- askCards self (filter isTreasure h)
+                             (OtherQuestion $ "play treasures"++needed)
+                             (0,length h)
+                       -- we might try to make these more atomic...?
+                       plusCoin $ sum $ map getTreasure ts
+                       played << ts
+                       coins' <- withTurn $ gets turnCoins
+                       if cost <= coins'
+                          then do plusCoin (-cost)
+                                  discard self *<< [c] -- only gain from supply
+                                  return [c]
+                          else return []
+                 buy <- catchError f (\_ -> return [])
+                 -- allow reordering of submerged cards?
+                 bmDeck .<< filter (notIn buy) cs
+                 
+
+envoy :: Card
+envoy = Card 0 4 "Envoy" "..." [action a]
+    where a = try $ do
+                self <- getSelf
+                lho <- getLHO self
+                cs <-5<* deck self
+                [c] <- askCards lho cs (OtherQuestion "envoy discard") (1,1)
+                discard self *<< [c]
+                hand self << filter (/=c) cs
 
 -- *Intrigue
 
@@ -341,10 +392,7 @@ pearlDiver = Card 0 2 "Pearl Diver" "..." [action $ try a]
                  plusAction 1 >> plusCard 1
                  [c] <-1<. deck self
                  move <- askYN self $ "Move " ++ show c ++ " to top?"
-                 getStack (deck self) >>= ps "before"
                  if move then deck self *<< [c] else deck self .<< [c]
-                 getStack (deck self) >>= ps "after"
-          ps s x = liftIO $ putStrLn $ s ++ ": " ++ show x
 
 salvager :: Card
 salvager = Card 0 4 "Salvager" "..." [action a]

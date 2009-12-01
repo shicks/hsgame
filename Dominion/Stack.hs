@@ -1,6 +1,7 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
 
-module Dominion.Stack ( OStack, UStack, IStack,
+module Dominion.Stack ( OStack, UStack, IStack, printStack,
+                        addCards, orderedStack, unorderedStack,
                         (*<<), (.<<), (<<), (*<#), (.<#), (<#),
                         (<*), (<.), (*<<<), (.<<<), (<<<), (#<), (#<#),
                         getStack, top, bottom, trash, shuffle, shuffleIO,
@@ -17,10 +18,32 @@ import Control.Monad ( (>=>) )
 import Control.Monad.State ( gets, modify )
 import Control.Monad.Trans ( liftIO )
 import System.Random ( randomRIO )
-import Data.Array ( Ix, Array, elems, (//) )
+import Data.Array ( Ix, Array, elems, listArray, bounds, (//) )
 import Data.List ( sortBy )
 import Data.Maybe ( listToMaybe )
 import Data.Ord ( comparing )
+
+addCards :: [Card] -> Game [Card]
+addCards cs = do cur <- gets gameCards
+                 let (mn,mx) = bounds cur
+                     ids = [mx+1,mx+2..]
+                     upd i c = c { cardId = i }
+                     cs' = zipWith upd ids cs
+                     upd' c = (SN "supply",fromIntegral $ cardId c,c)
+                     cur' = listArray (mn,mx+fromIntegral (length cs))
+                            (elems cur++map upd' cs')
+                 modify $ \s -> s { gameCards = cur' }
+                 return cs'
+
+-- for debugging
+printStack :: OutputStack s => String -> s -> Game ()
+printStack s x = do cs <- getStack x
+                    let pretty c = cardName c++" ("++show (cardPrice c)
+                                   ++") ["++show (cardId c)++"]"
+                    liftIO $ putStrLn s
+                    liftIO $ mapM_ (\c -> putStrLn $ "  " ++ pretty c) cs
+                    liftIO $ putStrLn "#"
+                    
 
 data OStack = OStack { -- ordered stack
       oAddToTop     :: [Card] -> Game (),  -- top is low
@@ -124,7 +147,7 @@ shuffleIO as = do i <- randomRIO (0,length as-1)
 getStack :: OutputStack s => s -> Game [Card]
 getStack = get 0
 
-infixr 5 *<<, .<<, <<
+infixr 1 *<<, .<<, <<
 (*<<), (.<<) :: OrderedInputStack s => s -> [Card] -> Game ()
 (*<<) = addToTop
 (.<<) = addToBottom
@@ -132,15 +155,20 @@ infixr 5 *<<, .<<, <<
 (<<)  = addToStack
 
 -- These are to be combine with (<*) and (<.) to make e.g. *<#5<*
-infixr 5 *<#, .<#, <#
+-- same precedence as =<<
+infixr 1 *<#, .<#, <#
 (*<#), (.<#) :: OrderedInputStack s => s -> Game [Card] -> Game ()
 (*<#) = (=<<) . (*<<)
 (.<#) = (=<<) . (.<<)
 (<#) :: UnorderedInputStack s => s -> Game [Card] -> Game ()
 (<#)  = (=<<) . (<<)
 
--- This is silly too...
-infixr 5 #<, #<#
+-- This is silly too - these are subtly different from =<< in
+-- that the function on the lhs returns (), rather than the
+-- result, and then we thread the argument back through.
+-- If we had a utility function thread :: (a->m b) -> (a->m a)
+-- then f #< a = (thread f) =<< a
+infixr 1 #<, #<#
 (#<) :: ([Card] -> Game ()) -> [Card] -> Game [Card]
 f #< cs = f cs >> return cs
 
@@ -151,12 +179,12 @@ top, bottom :: OrderedOutputStack s => Int -> s -> Game [Card]
 top n s = take n `fmap` orderedGetStack s n
 bottom n s = (take n . reverse) `fmap` orderedGetStack s n
 
-infixr 5 <., <*
+infixr 1 <., <*
 (<.), (<*) :: OrderedOutputStack s => Int -> s -> Game [Card]
 (<.) = bottom
 (<*) = top
 
-infix 5 .<<<, *<<<, <<<
+infix 1 .<<<, *<<<, <<<
 (.<<<), (*<<<) :: (OrderedInputStack s1,OutputStack s2) => s1 -> s2 -> Game ()
 (.<<<) to from = get 0 from >>= (to.<<)
 (*<<<) to from = get 0 from >>= (to*<<)

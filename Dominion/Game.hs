@@ -27,24 +27,24 @@ start ps c cs = do (chi,cho) <- pipe
                    execGame `flip` emptyState chi registero $ do
                      mapM_ fillDeck allPlayers
                      mapM_ (draw 5) allPlayers
-                     mapM_ fillSupply cs
-                     fillSupplyN 40 copper
-                     mapM_ (fillSupplyN 30) [silver,gold]
-                     mapM_ fillSupply [estate,duchy]
-                     fillSupplyN provs province
-                     fillSupplyN (10*(length ps-1)) curse
+                     mapM_ (runSetupHooks cs) cs
+                     let sup = concatMap copy cs ++ replicate 40 copper
+                               ++ concatMap (replicate 30) [silver,gold]
+                               ++ concatMap copy [estate,duchy]
+                               ++ replicate provs province
+                               ++ replicate (10*(length ps-1)) curse
+                     addCards sup
+                     return ()
     where allPlayers = map PId [0..length ps-1]
-          fillDeck p = do es <- replicateM 3 (copyCard estate)
-                          cs <- replicateM 7 (copyCard copper)
-                          discard p *<< es++cs
+          fillDeck p = discard p *<#
+                       addCards (replicate 3 estate ++ replicate 7 copper)
           emptyPlayer (i,(s,c)) = PlayerState i s c []
           emptyState chi cho =
               GameState (map emptyPlayer $ zip [0..] ps) (array (0,-1) [])
                             0 newTurn {-defaultGain-} chi cho [0..]
-          fillSupplyN n c' = mapM_ copyCard (take n $ repeat c')
+          copy cd = replicate (if isVictory cd then vic else 10) cd
           vic = if length ps<3 then 8 else 12
           provs = if length ps<=4 then vic else 3*(length ps)
-          fillSupply c' = fillSupplyN (if isVictory c' then vic else 10) c'
           respond ch rs = do r <- readInput ch
                              case r of
                                AnswerFromClient q as -> do
