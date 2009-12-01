@@ -6,8 +6,8 @@ module Dominion.Stack ( OStack, UStack, IStack, printStack,
                         (<*), (<.), (*<<<), (.<<<), (<<<), (#<), (#<#),
                         stackName, getStack, top, bottom,
                         shuffle, shuffleIO,
-                        draw, hand, deck, discard, mat,
-                        durations, played, aside, trash,
+                        draw, hand, deck, discard, mat, trash,
+                        durations, played, prevDuration, aside,
                         allSupply, supplyCards, allCards,
                         defaultGain, gain, cardWhere ) where
 
@@ -233,6 +233,9 @@ durations p = unorderedStack $ SPId p "durations"
 
 played :: UStack
 played = unorderedStack $ SN "turnPlayed"
+
+prevDuration :: UStack
+prevDuration = unorderedStack $ SN "prev-duration"
 
 aside :: UStack
 aside = unorderedStack $ SN "aside"

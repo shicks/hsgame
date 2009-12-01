@@ -80,7 +80,8 @@ data GameState = GameState {
       gameCards    :: Array CId (StackName, Integer, Card),
       currentTurn  :: PId,
       turnState    :: TurnState,
---      hookGain     :: PId -> Card -> Game (),  {- for embargo -> BUY -}
+--      hookGain     :: PId -> Card -> Game (),  {- for smuggler -}
+--      hookBuy      :: PId -> Card -> Game (),  {- for embargo, treasury -}
       inputChan    :: Input MessageToServer,
       outputChan   :: Output RegisterQuestionMessage,
       _qIds        :: [QId]  -- [QId 0..]
@@ -94,7 +95,6 @@ data PlayerState = PlayerState {
       playerName      :: String,
       playerChan      :: Output MessageToClient,
       durationEffects :: [Game ()]
---      gainedLastTurn  :: [Card]   {- for smugglers -}
     }
 
 data TurnState = TurnState {
@@ -103,8 +103,11 @@ data TurnState = TurnState {
       turnCoins    :: Int,
       priceMod     :: Card -> Int,
       treasureMod  :: Card -> Int,
-      cleanupHooks :: [Game ()]
---      turnCleanMod :: [Game ()]   {- for outpost/treasury -}
+      cleanupHooks :: [Game () -> Game ()]
+        -- ORDERED: treasury first, then outpost
+        -- outpost needs to know how to take another turn
+        -- treasury needs to know whether we bought a victory... :-/
+        -- embargo also piggybacks only on buys, so these can go together.
 }
 
 data Card = Card {

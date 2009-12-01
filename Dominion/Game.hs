@@ -83,20 +83,20 @@ play = do winner <- endGame
                            
 turn :: Game ()
 turn = do self <- gets currentTurn
-          modify $ \s -> s { turnState = newTurn }
-          duration self
-          actions self
-          coins <- gets $ turnCoins . turnState
-          treasure <- sum `fmap` (mapM getTreasure =<< getStack (hand self))
-          buys <- gets $ turnBuys . turnState
-          --supply <- allSupply
-          --tell self $ "Supply: " ++ show supply
-          buy self buys (coins + treasure)
-          cleanup self
-          -- next turn
+          doTurn self
           n <- gets $ length . gamePlayers
           modify $ \s -> s { currentTurn = (self+PId 1)`mod`(PId n) }
-    where actions self = do h <- getStack $ hand self
+    where doTurn self = do modify $ \s -> s { turnState = newTurn }
+                           duration self
+                           actions self
+                           coins <- gets $ turnCoins . turnState
+                           treasure <- sum `fmap` (mapM getTreasure =<<
+                                                   getStack (hand self))
+                           buys <- gets $ turnBuys . turnState
+                           -- tell self . ("Supply: "++) . show =<< allSupply
+                           buy self buys (coins + treasure)
+                           cleanup self
+          actions self = do h <- getStack $ hand self
                             a <- withTurn $ gets turnActions
                             tell self $ "Actions ("++show a++"): hand="++show h
                             let as = filter (isAction) h
@@ -118,11 +118,14 @@ turn = do self <- gets currentTurn
                    totalCost <- sum `fmap` mapM priceM cs
                    if totalCost <= money then gain self discard *<< cs
                                          else buy self buys money
-          duration self = do played <<< durations self
+          duration self = do prevDuration <<< durations self
                              withPlayer self (gets durationEffects)
                                             >>= sequence_
                              withPlayer self (modify $
                                             \s -> s { durationEffects = [] })
-          cleanup self = do discard self *<<< played
-                            discard self *<<< hand self
+          cleanupStacks self = do discard self *<<< played
+                                  discard self *<<< prevDuration
+                                  discard self *<<< hand self
+          cleanup self = do let rep = cleanupStacks self >> doTurn self
+                            mapM_ ($rep) =<< withTurn (gets cleanupHooks)
                             draw 5 self

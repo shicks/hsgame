@@ -668,7 +668,7 @@ isAction :: Card -> Bool
 isAction c = not $ null [() | Action _ <- cardType c]
 
 getAction :: Card -> Game ()
-getAction c = foldl (>>) (return ()) [a c Nothing | Action a <- cardType c]
+getAction c = mapM_ id [a c Nothing | Action a <- cardType c]
 
 getActionPred :: Card -> Card -> Game ()
 getActionPred pred c = foldl (>>) (return ())
