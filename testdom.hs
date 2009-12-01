@@ -3,7 +3,8 @@ import Dominion
 import TCP.Message ( Message(..) )
 import TCP.Client ( runClientTCP, ioClient )
 import TCP.Server ( runServerTCP )
-import TCP.ServerTypes ( ServerMessage(..), ioServer )
+import TCP.ServerTypes ( ServerMessage(..), modifyServer, ioServer )
+import NamePicker ( simpleNamedClient, pickNames )
 
 import Control.Concurrent ( forkIO )
 import TCP.Chan ( Input, Output, readInput, writeOutput, pipe )
@@ -177,14 +178,17 @@ main =
     do args <- getArgs
        case args of
          [name@('b':'o':'t':'2':_),hostname] ->
-             runClientTCP hostname 12345 $ ioClient $
+             runClientTCP hostname 12345 $ simpleNamedClient name $ ioClient $
                           client (weightedBot weights) name
          [name@('b':'o':'t':_),hostname] ->
-             runClientTCP hostname 12345 $ ioClient $ botClient name
+             runClientTCP hostname 12345 $ simpleNamedClient name $ ioClient $
+                          botClient name
          [name,hostname] ->
-             runClientTCP hostname 12345 $ ioClient $ stdioClient name
+             runClientTCP hostname 12345 $ simpleNamedClient name $ ioClient $
+                          stdioClient name
          ["server"] ->
-             runServerTCP 12345 $ ioServer server
+             runServerTCP 12345 $ modifyServer (pickNames "client" "server") $
+                          ioServer server
          _ -> twoPlayer
 
 pickDecks :: IO [Card]

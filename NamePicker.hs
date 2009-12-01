@@ -1,10 +1,11 @@
-module NamePicker ( pickNames, namedClient ) where
+module NamePicker ( pickNames, namedClient, simpleNamedClient ) where
 
-import TCP.Client ( ClientModifier, ioClientModifier )
+import TCP.Client ( Client, ioClient, forkClient )
 import TCP.ServerTypes ( ServerMessage(..), ServerModifier, ioConnector )
 import TCP.Chan ( ShowRead, writeOutput, readInput )
 import TCP.Message ( Message(..) )
 
+import Control.Concurrent ( forkIO )
 import Control.Monad ( forever )
 
 data NC name message = NamePrompt String | NC message
@@ -15,19 +16,39 @@ data NS name message = MyNameIs name | NS message
                                deriving (Show, Read)
 instance (ShowRead name, ShowRead message) => ShowRead (NS name message)
 
+simpleNamedClient :: (ShowRead toclient, ShowRead toserver) =>
+               String -> Client toclient toserver
+            -> Client (NC String toclient) (NS String toserver)
+simpleNamedClient n c =
+    ioClient $ \intoclient ontoserver ->
+        do inp <- readInput intoclient
+           case inp of
+             NamePrompt _ ->
+                 do writeOutput ontoserver (MyNameIs n)
+                    (i,o) <- forkClient c
+                    forkIO $ forever $ do NC x <- readInput intoclient
+                                          writeOutput o x
+                    forever $ do x <- readInput i
+                                 writeOutput ontoserver $ NS x
+             _ -> fail "bad response from server!"
+
 namedClient :: (ShowRead toclient, ShowRead toserver) =>
-               ClientModifier (NC String toclient) (NS String toserver)
-                              toclient toserver
-namedClient = ioClientModifier $ \otoserver otoclient i -> forever $
-              do inp <- readInput i
-                 case inp of
-                   Left (NamePrompt p) -> do putStrLn p
-                                             n <- getLine
-                                             writeOutput otoserver (MyNameIs n)
-                   Left (NC x) -> do -- putStrLn ("client got message "++show x)
-                                     writeOutput otoclient x
-                   Right x -> do -- putStrLn ("client sent message "++show x)
-                                 writeOutput otoserver (NS x)
+               Client toclient toserver
+            -> Client (NC String toclient) (NS String toserver)
+namedClient c =
+    ioClient $ \intoclient ontoserver ->
+        do inp <- readInput intoclient
+           case inp of
+             NamePrompt p ->
+                 do putStrLn p
+                    n <- getLine
+                    writeOutput ontoserver (MyNameIs n)
+                    (i,o) <- forkClient c
+                    forkIO $ forever $ do NC x <- readInput intoclient
+                                          writeOutput o x
+                    forever $ do x <- readInput i
+                                 writeOutput ontoserver $ NS x
+             _ -> fail "bad response from server!"
 
 pickNames :: (Eq client, ShowRead client, Eq name, ShowRead name,
               ShowRead toclient, ShowRead toserver) =>
@@ -60,6 +81,7 @@ pickNames upserver server = ioConnector $ \oup odown i ->
                               Nothing ->
                                   do putStrLn ("Message for "++show t++
                                                "? from "++ show nf)
+                                     writeOutput odown (Message nf server (M z))
                                      handler xs
                               Just nt ->
                                   do putStrLn ("Message from "++show nf)

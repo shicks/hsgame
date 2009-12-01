@@ -6,7 +6,7 @@ import Control.Concurrent ( forkIO )
 
 import TCP.ServerTypes ( ServerMessage(M,N), ioServer, modifyServer )
 import TCP.Server ( runServerTCP )
-import TCP.Client ( runClientTCP, ioClient, modifyClient )
+import TCP.Client ( runClientTCP, ioClient )
 import TCP.Message ( Message(..) )
 import TCP.Chan ( readInput, writeOutput )
 import NamePicker ( pickNames, namedClient )
@@ -19,7 +19,7 @@ main = do args <- getArgs
             _ -> fail "need zero or one argument (a host)"
 
 client :: String -> IO ()
-client host = runClientTCP host 12345 $ modifyClient namedClient $
+client host = runClientTCP host 12345 $ namedClient $
               ioClient $ \i o ->
               do x <- readInput i
                  putStrLn x
