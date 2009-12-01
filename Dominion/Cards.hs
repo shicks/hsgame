@@ -76,15 +76,79 @@ dominion = [adventurer, bureaucrat, cellar, chancellor, chapel,
             remodel, smithy, spy, thief, throneRoom, village,
             witch, woodcutter, workshop]
 
+dominionSets :: [(String, [Card])]
+dominionSets =
+    [("First Game",
+      [cellar, market, militia, mine, moat, remodel, smithy, village,
+       woodcutter, workshop]),
+     ("Big Money",
+      [adventurer, bureaucrat, chancellor, chapel, feast, laboratory,
+       market, mine, moneylender, throneRoom]),
+     ("Interaction",
+      [bureaucrat, chancellor, councilRoom, festival, library, militia,
+       moat, spy, thief, village]),
+     ("Size Distortion",
+      [cellar, chapel, feast, gardens, laboratory, thief, village, witch,
+       woodcutter, workshop]),
+     ("Village Square",
+      [bureaucrat, cellar, festival, library, market, remodel, smithy,
+       throneRoom, village, woodcutter])]
+
 promos :: [Card]
 promos = []
 
 intrigue :: [Card]
 intrigue = [courtyard, greatHall, harem, secretChamber]
 
+intrigueSets :: [(String, [Card])]
+intrigueSets =
+    [("Underlings",
+     [-- baron, masquerade, minion, nobles, pawn, stewart
+      cellar, festival, library, witch]),
+     ("Hand Madness",
+      [-- minion, nobles, steward, torturer
+       bureaucrat, chancellor, councilRoom, courtyard, mine, militia ]),
+     ("Deconstruction",
+      [-- bridge, miningVillage, sabateur, swindler, torturer,
+       remodel, secretChamber, spy, thief, throneRoom ]),
+     ("Victory Dance",
+      [-- bridge, ironworks, masquerade, nobles, pawn, scout, upgrade, duke,
+       greatHall, harem ]),
+     ("Secret Schemes",
+      [-- conspirator, ironworks, pawn, sabateur, shantyTown, steward,
+       -- swindler, tradingPost, upgrade, wishingWell,
+       harem ]),
+     ("Best Wishes",
+      [-- copperSmith, masquerade, scout, shantyTown, steward, torturer,
+       -- tradingPost, upgrade, wishingWell
+       courtyard ])
+    ]
+
+
 seaside :: [Card]
 seaside = [bazaar, caravan, fishingVillage, lookout, merchantShip,
            pearlDiver, salvager, tactician, warehouse, wharf]
+
+seasideSets :: [(String,[Card])]
+seasideSets =
+    [("High Seas",
+      [-- embargo, explorer, haven, island, pirateShip, smugglers, 
+       bazaar, caravan, lookout, wharf ]),
+     ("Buried Treasure",
+      [-- ambassador, cutpurse, lighthouse, outpost, treasureMap,
+       fishingVillage, pearlDiver, tactician, warehouse, wharf]),
+     ("Shipwrecks",
+      [-- ghostShip, nativeVillage, navigator, seaHag, smugglers, treasury
+       merchantShip, pearlDiver, salvager, warehouse]),
+     ("Reach for Tomorrow",
+      [-- ghostShip, lookout, seaHag, treasureMap, cutpurse,
+       adventurer, cellar, councilRoom, spy, village]),
+     ("Repetition",
+      [ -- explorer, pirateShip, treasury, outpost,
+       caravan, chancellor, festival, militia, pearlDiver, workshop]),
+     ("Give and Take",
+      [ -- haven, island, salvager, ambassador, smugglers,
+        fishingVillage, library, market, moneylender, witch])]
 
 -- cards themselves
 adventurer :: Card

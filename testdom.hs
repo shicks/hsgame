@@ -139,7 +139,14 @@ main =
 
 pickDecks :: IO [Card]
 pickDecks = do let all = dominion ++ promos ++ intrigue ++ seaside
-               decks <- take 10 `fmap` shuffleIO all
+                   sets = filter ((==10).length.snd)
+                          (dominionSets++intrigueSets)
+               r <- randomRIO (1,100)
+               decks <- if r > (10 :: Int)
+                        then take 10 `fmap` shuffleIO all
+                        else do (sn,d) <- head `fmap` shuffleIO sets
+                                putStrLn ("Using set "++sn)
+                                return d
                return $ sortBy (comparing cardPrice) decks
 
 twoPlayer :: IO ()
