@@ -7,7 +7,7 @@ import TCP.ServerTypes ( ServerMessage(..), ioServer )
 
 import Control.Concurrent ( forkIO )
 import TCP.Chan ( Input, Output, readInput, writeOutput, pipe )
-import Control.Monad ( forever, when, forM_ )
+import Control.Monad ( forever, when, replicateM, forM_ )
 import Control.Monad.State ( evalStateT, execStateT,
                              StateT, runStateT, put, get, modify, liftIO )
 import Data.List ( sortBy )
@@ -97,6 +97,53 @@ stdioClient name = client (stateToPlayer status info answer "") name
                            spaces++name++spaces,
                            replicate 40 '-',""]
 
+weights :: QuestionMessage -> Answer -> Double
+weights _ (PickCard c) | cname c == "Cellar" = 0
+                       | cname c == "Province" = 100
+                       | cname c == "Gold" = 40
+                       | cname c == "Silver" = 10
+                       | cname c == "Copper" = 0
+                       | cname c == "Curse" = 0
+                       | cname c == "Estate" = 0
+                       | cname c == "Chancellor" = 0
+                       | cname c == "Bureaucrat" = 0
+                       | cname c == "Chapel" = 0.1
+                       | cname c == "Council Room" = 0.3
+                       | cname c == "Feast" = 1.5
+                       | cname c == "Festival" = 7
+                       | cname c == "Laboratory" = 7
+                       | cname c == "Market" = 7
+                       | cname c == "Militia" = 2
+                       | cname c == "Mine" = 2
+                       | cname c == "Village" = 6
+                       | cname c == "Smithy" = 7
+                       | cname c == "Spy" = 0
+                       | cname c == "Thief" = 2
+weights _ _ = 1
+
+weightedBot :: (QuestionMessage -> Answer -> Double) -> PlayerFunctions
+weightedBot weight = ioToPlayer status info answer
+    where status _ = return ()
+          info _   = return ()
+          pick wtot was = do putStrLn "contemplating"
+                             seek was `fmap` randomRIO (0,wtot)
+          seek [(_,a)] _ = a
+          seek ((w,a):was) p | p <= w = a
+                             | otherwise = seek was (p-w)
+          answer q as (a,b) =
+              liftIO $ do let ws = zipWith weight (repeat q) as
+                          let wtot = sum ws
+                          n0 <- randomRIO (0.5,wtot)
+                          let n = max a $ min (round n0) b
+                          putStrLn ("deciding between: "++show n)
+                          x <- replicateM n $ pick wtot (zip ws as)
+                          putStrLn "Chose:"
+                          mapM_ (\aa -> putStrLn (show q++" "++pretty aa)) x
+                          return x
+          pretty (Choose s) = s
+          pretty (PickCard c) = cname c++" ("++show (cprice c)++")"
+
+
 randomBot :: PlayerFunctions
 randomBot = ioToPlayer status info answer
     where status _ = return ()
@@ -129,6 +176,9 @@ main :: IO ()
 main =
     do args <- getArgs
        case args of
+         [name@('b':'o':'t':'2':_),hostname] ->
+             runClientTCP hostname 12345 $ ioClient $
+                          client (weightedBot weights) name
          [name@('b':'o':'t':_),hostname] ->
              runClientTCP hostname 12345 $ ioClient $ botClient name
          [name,hostname] ->
