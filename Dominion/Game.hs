@@ -71,7 +71,12 @@ play = do winner <- endGame
                        if not over then return Nothing else do
                        let ps = map fromIntegral [0..np-1]
                        names <- mapM (\p -> withPlayer p $ gets playerName) ps
-                       (Just . zip names) `fmap` mapM playerScore ps
+                       scores <- (zip names) `fmap` mapM playerScore ps
+                       let scoreannouncement =
+                               unlines ("Game over!": map show scores)
+                       mapM_ (`tell` scoreannouncement) ps
+                       liftIO $ putStrLn scoreannouncement
+                       return $ Just scores
           playerScore :: PId -> Game Int
           playerScore p = do cs <- allCards p
                              foldM (flip ($)) 0 $
