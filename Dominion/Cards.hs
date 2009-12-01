@@ -443,14 +443,18 @@ pawn = Card 0 2 "Pawn" "..." [action $ getSelf >>= a]
 
 saboteur :: Card
 saboteur = Card 0 5 "Saboteur" "..." [action a]
-    where a = attackNow "saboteur" $ \_ -> att []
-          att cs opp = try $ do [c] <-1<* deck opp
-                                p <- priceM c
-                                if p<3 then att (c:cs) opp else do
-                                trash << [c]
-                                sup <- supplyCosting (<=(p-2))
-                                gain opp discard *<#
-                                     askCards opp sup SelectGain (1,1)
+    where a = attackNow "saboteur" att
+          att self opp = finally (do [c] <-1<* deck opp
+                                     aside << [c]
+                                     p <- priceM c
+                                     if p<3 then att self opp else do
+                                        trash << [c]
+                                        tell self $ "Trashed "++show c
+                                        sup <- supplyCosting (<=(p-2))
+                                        gain opp discard *<#
+                                             askCards opp sup (q c) (1,1))
+                         $ discard opp *<<< aside
+          q c = OtherQuestion $ "Trashed "++show c++": replacement?"
 
 scout :: Card
 scout = Card 0 4 "Scout" "..." [action a]
@@ -663,6 +667,9 @@ getActionPred pred c = foldl (>>) (return ())
 
 sameName :: Card -> Card -> Bool
 sameName = (==) `on` cardName
+
+finally :: Game () -> Game () -> Game ()
+finally job after = try job >> after
 
 -- Want some sort of asynchrony, in that we can go on with our
 -- turn while others are selecting their reactions...

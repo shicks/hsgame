@@ -7,7 +7,7 @@ module Dominion.Stack ( OStack, UStack, IStack, printStack,
                         stackName, getStack, top, bottom,
                         shuffle, shuffleIO,
                         draw, hand, deck, discard, mat,
-                        durations, played, trash,
+                        durations, played, aside, trash,
                         allSupply, supplyCards, allCards,
                         defaultGain, gain, cardWhere ) where
 
@@ -223,16 +223,19 @@ deck p = OStack att atb gs sn
                                return $ x++d'
 
 discard :: PId -> OStack
-discard p = orderedStack (SPId p "discard")
+discard p = orderedStack $ SPId p "discard"
 
 mat :: String -> PId -> OStack
-mat n p = orderedStack (SPId p ("stack-"++n))
+mat n p = orderedStack $ SPId p $ "stack-"++n
 
 durations :: PId -> UStack
-durations p = unorderedStack (SPId p "durations")
+durations p = unorderedStack $ SPId p "durations"
 
 played :: UStack
-played = unorderedStack (SN "turnPlayed")
+played = unorderedStack $ SN "turnPlayed"
+
+aside :: UStack
+aside = unorderedStack $ SN "aside"
 
 trash :: UStack
 trash = unorderedStack $ SN "trash"
