@@ -98,10 +98,27 @@ stdioClient name = client (stateToPlayer status info answer "") name
                            replicate 40 '-',""]
 
 weights :: QuestionMessage -> Answer -> Double
+weights (TrashBecause _) (PickCard c)
+        | cname c == "Curse" = 1000
+        | cname c == "Estate" = 20
+        | cname c == "Copper" = 2
+        | otherwise = 0
+weights (DiscardBecause _) (PickCard c)
+        | cname c == "Curse" = 100
+        | cname c == "Estate" = 100
+        | cname c == "Duchy" = 100
+        | cname c == "Province" = 100
+        | cname c == "Copper" = 3
+        | cname c == "Gold" = 0
+        | cname c == "Village" = 0
+        | cname c == "Bazaar" = 0
+        | cname c == "Market" = 0
+        | otherwise = 0
 weights _ (PickCard c) | cname c == "Cellar" = 0
                        | cname c == "Province" = 100
                        | cname c == "Gold" = 40
                        | cname c == "Silver" = 10
+                       | cname c == "Warehouse" = 0
                        | cname c == "Copper" = 0
                        | cname c == "Curse" = 0
                        | cname c == "Estate" = 0
@@ -118,6 +135,7 @@ weights _ (PickCard c) | cname c == "Cellar" = 0
                        | cname c == "Village" = 6
                        | cname c == "Smithy" = 7
                        | cname c == "Spy" = 0
+                       | cname c == "Courtyard" = 0
                        | cname c == "Thief" = 2
 weights _ _ = 1
 
@@ -125,11 +143,11 @@ weightedBot :: (QuestionMessage -> Answer -> Double) -> PlayerFunctions
 weightedBot weight = ioToPlayer status info answer
     where status _ = return ()
           info _   = return ()
-          pick wtot was = do putStrLn "contemplating"
-                             seek was `fmap` randomRIO (0,wtot)
+          pick wtot was = seek was `fmap` randomRIO (0,wtot)
           seek [(_,a)] _ = a
           seek ((w,a):was) p | p <= w = a
                              | otherwise = seek was (p-w)
+          answer _ _ (0,0) = return []
           answer q as (a,b) =
               liftIO $ do let ws = zipWith weight (repeat q) as
                           let wtot = sum ws
