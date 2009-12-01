@@ -122,6 +122,28 @@ weights _ (PickCard c) | cname c == "Cellar" = 0
                        | cname c == "Thief" = 2
 weights _ _ = 1
 
+wmoney :: QuestionMessage -> Answer -> Double
+wmoney (TrashBecause _) (PickCard c)
+    | cname c == "Curse" = 1000
+    | cname c == "Estate" = 20
+    | cname c == "Duchy" = 5
+    | cname c == "Copper" = 2
+    | cname c == "Silver" = 0.01
+    | otherwise = 0
+wmoney (DiscardBecause _) (PickCard c) | cname c == "Curse" = 100
+                                       | cname c == "Estate" = 100
+                                       | cname c == "Duchy" = 100
+                                       | cname c == "Province" = 100
+                                       | cname c == "Copper" = 3
+                                       | cname c == "Silver" = 0.5
+                                       | otherwise = 0
+wmoney _ (PickCard c) | cname c == "Province" = 1000
+                      | cname c == "Harem" = 80
+                      | cname c == "Gold" = 40
+                      | cname c == "Silver" = 2
+                      | cname c == "Duchy" = 0.1
+wmoney _ _ = 0
+
 weightedBot :: (QuestionMessage -> Answer -> Double) -> PlayerFunctions
 weightedBot weight = ioToPlayer status info answer
     where status _ = return ()
@@ -177,6 +199,9 @@ main :: IO ()
 main =
     do args <- getArgs
        case args of
+         [name@('m':'o':'n':_),hostname] ->
+             runClientTCP hostname 12345 $ simpleNamedClient name $ ioClient $
+                          client (weightedBot wmoney) name
          [name@('b':'o':'t':'2':_),hostname] ->
              runClientTCP hostname 12345 $ simpleNamedClient name $ ioClient $
                           client (weightedBot weights) name
