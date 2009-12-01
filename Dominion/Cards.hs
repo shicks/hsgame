@@ -10,6 +10,9 @@ import Control.Monad.Error ( catchError )
 import Control.Monad ( when, unless, join, replicateM, forM, forM_,
                        zipWithM_ )
 import Data.Maybe ( listToMaybe, maybeToList, catMaybes, fromMaybe )
+||| Merge shicks >>>
+
+<<< Merge shicks |||
 import Data.List ( (\\), nubBy, partition )
 import Data.Function ( on )
 
@@ -26,12 +29,26 @@ affords :: Game (Int -> Card -> Bool)
 affords = do price <- withTurn $ gets priceMod
              return $ \p c -> price c <= p 
 
+||| Merge shicks >>>
+priceM :: Card -> Game Int
+priceM c = do price <- withTurn $ gets turnPriceMod
+              return $ price c
+
+distinctSupplies :: Game [Card]
+distinctSupplies = nubBy samename `fmap` allSupply
+    where samename a b = cardName a == cardName b
+
+
+<<< Merge shicks |||
+||| resolve conflicts >>>
 priceM :: Card -> Game Int
 priceM c = do withTurn $ ($c) `fmap` gets priceMod
 
 distinctSupplies :: Game [Card]
 distinctSupplies = nubBy sameName `fmap` allSupply
 
+
+<<< resolve conflicts |||
 supplyCosting :: (Int -> Bool) -> Game [Card]
 supplyCosting f = do price <- withTurn $ gets priceMod
                      sup <- distinctSupplies
@@ -135,6 +152,31 @@ seaside :: [Card]  -- outpost, treasury, smugglers, .....
 seaside = [bazaar, caravan, fishingVillage, lookout, merchantShip,
            pearlDiver, salvager, tactician, warehouse, wharf]
 
+||| add recommended deck sets. >>>
+seasideSets :: [(String,[Card])]
+seasideSets =
+    [("High Seas",
+      [-- embargo, explorer, haven, island, pirateShip, smugglers, 
+       bazaar, caravan, lookout, wharf ]),
+     ("Buried Treasure",
+      [-- ambassador, cutpurse, lighthouse, outpost, treasureMap,
+       fishingVillage, pearlDiver, tactician, warehouse, wharf]),
+     ("Shipwrecks",
+      [-- ghostShip, nativeVillage, navigator, seaHag, smugglers, treasury
+       merchantShip, pearlDiver, salvager, warehouse]),
+     ("Reach for Tomorrow",
+      [-- ghostShip, lookout, seaHag, treasureMap, cutpurse,
+       adventurer, cellar, councilRoom, spy, village]),
+     ("Repetition",
+      [ -- explorer, pirateShip, treasury, outpost,
+       caravan, chancellor, festival, militia, pearlDiver, workshop]),
+     ("Give and Take",
+      [ -- haven, island, salvager, ambassador, smugglers,
+        fishingVillage, library, market, moneylender, witch])]
+
+
+<<< add recommended deck sets. |||
+||| resolve conflicts >>>
 seasideSets :: [(String,[Card])]
 seasideSets =
     [("High Seas",
@@ -162,6 +204,8 @@ allDecks = dominion ++ promos ++ intrigue ++ seaside
 allRecommended :: [(String,[Card])]
 allRecommended = dominionSets ++ intrigueSets ++ seasideSets
 
+
+<<< resolve conflicts |||
 -- base set
 adventurer :: Card
 adventurer = Card 0 6 "Adventurer" "..." [action $ getSelf >>= a ]
@@ -313,6 +357,7 @@ thief = Card 0 4 "Thief" "..." [action a]
                 [c] <- askCards self ts (TrashBecause "thief") (1,1)
                 askMC self [("Steal",gain self discard *<< [c]),
                             ("Trash",trash << [c])] $ "Steal "++show c++"?"
+                when keep $ gain self discard *<< [c]
 
 -- TR and durations - FV=Fishing Village
 -- card (pred)    [self is always self]

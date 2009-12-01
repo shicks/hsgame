@@ -1,5 +1,11 @@
+||| Merge spurious conflicts. >>>
+
+<<< Merge spurious conflicts. |||
+||| resolve conflicts >>>
 {-# LANGUAGE PatternGuards #-}
 
+
+<<< resolve conflicts |||
 import Dominion
 
 import TCP.Message ( Message(..) )
@@ -143,6 +149,28 @@ weights _ (PickCard c) | cname c == "Cellar" = 0
                        | cname c == "Thief" = 2
 weights _ _ = 1
 
+wmoney :: QuestionMessage -> Answer -> Double
+wmoney (TrashBecause _) (PickCard c)
+    | cname c == "Curse" = 1000
+    | cname c == "Estate" = 20
+    | cname c == "Duchy" = 5
+    | cname c == "Copper" = 2
+    | cname c == "Silver" = 0.01
+    | otherwise = 0
+wmoney (DiscardBecause _) (PickCard c) | cname c == "Curse" = 100
+                                       | cname c == "Estate" = 100
+                                       | cname c == "Duchy" = 100
+                                       | cname c == "Province" = 100
+                                       | cname c == "Copper" = 3
+                                       | cname c == "Silver" = 0.5
+                                       | otherwise = 0
+wmoney _ (PickCard c) | cname c == "Province" = 1000
+                      | cname c == "Harem" = 80
+                      | cname c == "Gold" = 40
+                      | cname c == "Silver" = 2
+                      | cname c == "Duchy" = 0.1
+wmoney _ _ = 0
+
 weightedBot :: (QuestionMessage -> Answer -> Double) -> PlayerFunctions
 weightedBot weight = ioToPlayer status info answer
     where status _ = return ()
@@ -201,6 +229,9 @@ main = getArgs >>= mainArgs []
 mainArgs :: [Card] -> [String] -> IO ()
 mainArgs cs as
     = case as of
+         [name@('m':'o':'n':_),hostname] ->
+             runClientTCP hostname 12345 $ simpleNamedClient name $ ioClient $
+                          client (weightedBot wmoney) name
         [name@('b':'o':'t':'2':_),hostname] ->
              runClientTCP hostname 12345 $ simpleNamedClient name $ ioClient $
                           client (weightedBot weights) name
@@ -224,14 +255,41 @@ mainArgs cs as
                               | otherwise        = lookupBy f s as
 
 pickDecks :: [Card] -> IO [Card]
-pickDecks cs = do let sets = filter ((==10).length.snd) allRecommended
+pickDecks cs = do let ||| add recommended deck sets. >>>
+all = dominion ++ promos ++ intrigue ++ seaside
+                   sets = filter ((==10).length.snd)
+                          (dominionSets++intrigueSets)
+               r <- randomRIO (1,100)
+               
+<<< add recommended deck sets. |||
+||| resolve conflicts >>>
+sets = filter ((==10).length.snd) allRecommended
                   r <- randomRIO (1,100)
-                  decks <- if r > (10 :: Int) || not (null cs)
-                           then (take 10 . (cs++)) `fmap` shuffleIO allDecks
+                  
+<<< resolve conflicts |||
+decks <- ||| add recommended deck sets. >>>
+if r > (10 :: Int)
+                        then 
+<<< add recommended deck sets. |||
+||| resolve conflicts >>>
+if r > (10 :: Int) || not (null cs)
+                           then (
+<<< resolve conflicts |||
+take 10 . (cs++)) `fmap` shuffleIO ||| add recommended deck sets. >>>
+all
+                        else do (sn,d) <- head `fmap` shuffleIO sets
+                                putStrLn ("Using set "++sn)
+                                return d
+
+<<< add recommended deck sets. |||
+||| resolve conflicts >>>
+allDecks
                            else do (sn,d) <- head `fmap` shuffleIO sets
                                    putStrLn ("Using set "++sn)
                                    return d
-                  return $ sortBy (comparing cardPrice) decks
+   
+<<< resolve conflicts |||
+               return $ sortBy (comparing cardPrice) decks
 
 twoPlayer :: [Card] -> IO ()
 twoPlayer cs = do
