@@ -4,10 +4,12 @@ module Dominion.Stack ( OStack, UStack, IStack, printStack,
                         addCards, orderedStack, unorderedStack,
                         (*<<), (.<<), (<<), (*<#), (.<#), (<#),
                         (<*), (<.), (*<<<), (.<<<), (<<<), (#<), (#<#),
-                        getStack, top, bottom, trash, shuffle, shuffleIO,
-                        draw, hand, deck, discard, mat, durations, played,
+                        stackName, getStack, top, bottom,
+                        shuffle, shuffleIO,
+                        draw, hand, deck, discard, mat,
+                        durations, played, trash,
                         allSupply, supplyCards, allCards,
-                        defaultGain, gain ) where
+                        defaultGain, gain, cardWhere ) where
 
 import Dominion.Types
 import Dominion.Question
@@ -18,7 +20,7 @@ import Control.Monad ( (>=>) )
 import Control.Monad.State ( gets, modify )
 import Control.Monad.Trans ( liftIO )
 import System.Random ( randomRIO )
-import Data.Array ( Ix, Array, elems, listArray, bounds, (//) )
+import Data.Array ( Ix, Array, elems, listArray, bounds, (//), (!) )
 import Data.List ( sortBy )
 import Data.Maybe ( listToMaybe )
 import Data.Ord ( comparing )
@@ -48,12 +50,13 @@ printStack s x = do cs <- getStack x
 data OStack = OStack { -- ordered stack
       oAddToTop     :: [Card] -> Game (),  -- top is low
       oAddToBottom  :: [Card] -> Game (),
-      oGetStack     :: Int -> Game [Card]  -- top is front
+      oGetStack     :: Int -> Game [Card], -- top is front
+      oStackName    :: StackName
     }
 
 orderedStack :: StackName -> OStack
 orderedStack sn = OStack { oAddToTop = att, oAddToBottom = atb,
-                           oGetStack = gs }
+                           oGetStack = gs, oStackName = sn }
     where att :: [Card] -> Game ()
           att cs = do old <- gs'
                       let mindep = if null old
@@ -77,11 +80,13 @@ orderedStack sn = OStack { oAddToTop = att, oAddToBottom = atb,
 
 data UStack = UStack { -- unordered stack
       uAddToStack   :: [Card] -> Game (),
-      uGetStack    :: Int -> Game [Card]
+      uGetStack    :: Int -> Game [Card],
+      uStackName    :: StackName
     }
 
 unorderedStack :: StackName -> UStack
-unorderedStack sn = UStack { uAddToStack = add, uGetStack = gs }
+unorderedStack sn = UStack { uAddToStack = add, uGetStack = gs,
+                             uStackName = sn }
     where add cs = do let upd c = (cardId c, (sn,fromIntegral $ cardId c,c))
                           updates = map upd cs
                       modify $ \s -> s { gameCards = gameCards s//updates }
@@ -90,6 +95,8 @@ unorderedStack sn = UStack { uAddToStack = add, uGetStack = gs }
                           then [(x,c)]
                           else []
 
+class NamedStack s where
+    stackName :: s -> StackName
 class OrderedInputStack s where
     addToBottom :: s -> [Card] -> Game ()
     addToTop    :: s -> [Card] -> Game ()
@@ -107,10 +114,14 @@ instance OrderedOutputStack OStack where
     orderedGetStack = oGetStack
 instance OutputStack OStack where
     unorderedGetStack = oGetStack
+instance NamedStack OStack where
+    stackName = oStackName
 instance UnorderedInputStack UStack where
     addToStack = uAddToStack
 instance OutputStack UStack where
     unorderedGetStack = uGetStack
+instance NamedStack UStack where
+    stackName = uStackName
 
 get :: OutputStack s => Int -> s -> Game [Card]
 get = flip unorderedGetStack
@@ -201,8 +212,8 @@ hand p = unorderedStack (SPId p "hand")
 
 -- we've built in the reshuffling mechanism here...!
 deck :: PId -> OStack
-deck p = OStack att atb gs
-    where OStack att atb gs0 = orderedStack (SPId p "deck")
+deck p = OStack att atb gs sn
+    where OStack att atb gs0 sn = orderedStack (SPId p "deck")
           gs n = do x <- gs0 undefined {- ignored -}
                     if length x >= n
                        then return x
@@ -253,3 +264,9 @@ allCards p = (concatMap isp . elems) `fmap` gets gameCards
     where isp (st,_,c) = case st of
                            SPId p' _ | p' == p -> [c]
                            _ -> []
+
+cardWhere :: Card -> Game StackName
+cardWhere c = do cs <- gets gameCards
+                 let (s,_,_) = cs ! cardId c
+                 return s
+

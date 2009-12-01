@@ -5,7 +5,7 @@ import Dominion.Types
 import TCP.Chan ( writeOutput )
 import Control.Concurrent.MVar ( newEmptyMVar, takeMVar, putMVar )
 import Control.Monad.State ( gets, liftIO )
-import Data.Maybe ( catMaybes )
+import Data.Maybe ( catMaybes, fromJust )
 
 tell :: PId -> String -> Game ()
 tell p s = do och <- withPlayer p $ gets playerChan
@@ -29,10 +29,39 @@ ask1 p as q = do och <- withPlayer p $ gets playerChan
                    go
                    takeMVar mv
 
+ask2 :: PId -> [Answer] -> QuestionMessage -> Game (Answer,Answer)
+ask2 p as _ | length as<2 = fail "ask2 requires at least two choices"
+ask2 p as q = do och <- withPlayer p $ gets playerChan
+                 ich <- gets outputChan
+                 qid <- newQId
+                 liftIO $ do
+                   mv <- newEmptyMVar
+                   let go = writeOutput och $
+                            Question qid q as (2,2)
+                   writeOutput ich $ RQ qid $ \as' ->
+                       case as' of
+                         [a,a'] | a `elem` as && 
+                                  a' `elem` as &&
+                                  a /= a' -> do putMVar mv (a,a')
+                                                return True   -- unhook
+                         _ -> go >> return False            -- keep hook
+                   go
+                   takeMVar mv
+
 -- *even simpler wrapper around ask1
 askYN :: PId -> String -> Game Bool
 askYN p s = do a <- ask1 p [Choose "Yes",Choose "No"] $ OtherQuestion s
                return $ case a of { Choose "Yes" -> True; _ -> False }
+
+askMC :: PId -> [(String,Game a)] -> String -> Game a
+askMC p ss s = do Choose a <- ask1 p (map (Choose . fst) ss) $
+                              OtherQuestion s
+                  fromJust $ lookup a ss
+
+askMC2 :: PId -> [(String,Game ())] -> String -> Game ()
+askMC2 p ss s = do (a,a') <- ask2 p (map (Choose . fst) ss) $
+                             OtherQuestion s
+                   mapM_ (\(Choose a) -> fromJust $ lookup a ss) [a,a']
 
 -- *simple question with list of cards: choose between m and n
 askCards :: PId -> [Card] -> QuestionMessage -> (Int,Int) -> Game [Card]

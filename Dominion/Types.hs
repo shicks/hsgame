@@ -12,7 +12,8 @@ module Dominion.Types ( GameState(..), PlayerState(..), Game,
                         Answer(..), pickCard,
                         CardDescription(..), describeCard, lookupCard,
                         QuestionMessage(..), InfoMessage(..),
-                        newQId, getSelf, getLHO, getRHO, getOpponents,
+                        newQId,
+                        getSelf, getLHO, getRHO, getOpponents, getAllPlayers,
                         Attack, Reaction,
                         QId, CId, PId(..) ) where
 
@@ -238,6 +239,10 @@ getRHO p = do n <- gets $ length . gamePlayers
 getOpponents :: PId -> Game [PId]
 getOpponents p = do n <- gets $ length . gamePlayers
                     return $ filter (/=p) $ map PId [0..n-1]
+
+getAllPlayers :: Game [PId]
+getAllPlayers = do n <- gets $ length . gamePlayers
+                   return $ map PId [0..n-1]
 
 fromPId :: PId -> Game PlayerState
 fromPId p = withPlayer p $ gets id
