@@ -86,6 +86,9 @@ seaside :: [Card]
 seaside = [bazaar, caravan, fishingVillage, lookout, merchantShip,
            pearlDiver, salvager, tactician, warehouse, wharf]
 
+allDecks :: [Card]
+allDecks = dominion ++ promos ++ intrigue ++ seaside
+
 -- cards themselves
 adventurer :: Card
 adventurer = Card 0 6 "Adventurer" "..." [action $ try $ dig 0 ]
