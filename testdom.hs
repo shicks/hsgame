@@ -1,11 +1,5 @@
-||| Merge spurious conflicts. >>>
-
-<<< Merge spurious conflicts. |||
-||| allow specifying cards on command line >>>
 {-# LANGUAGE PatternGuards #-}
 
-
-<<< allow specifying cards on command line |||
 import Dominion
 
 import TCP.Message ( Message(..) )
@@ -207,12 +201,12 @@ main = getArgs >>= mainArgs []
 mainArgs :: [Card] -> [String] -> IO ()
 mainArgs cs as
     = case as of
-         [name@('b':'o':'t':'2':_),hostname] ->
+        [name@('b':'o':'t':'2':_),hostname] ->
              runClientTCP hostname 12345 $ simpleNamedClient name $ ioClient $
                           client (weightedBot weights) name
-        a:as' | [c] <- filter (\c -> map toLower a == filter (not.isSpace)
-                                   (map toLower $ cardName c)) allDecks
-                  -> mainArgs (c:cs) as'
+        a:as' | Just c <- lookupBy cardName a allDecks -> mainArgs (c:cs) as'
+              | Just d <- lookupBy fst a allRecommended ->
+                                                  mainArgs (cs++snd d) as'
         [name@('b':'o':'t':_),hostname] ->
             runClientTCP hostname 12345 $ simpleNamedClient name $ ioClient $
                           botClient name
@@ -223,38 +217,21 @@ mainArgs cs as
             runServerTCP 12345 $ modifyServer (pickNames "client" "server") $
                           ioServer (server cs)
         _ -> twoPlayer cs
+    where lc = filter (not . isSpace) . map toLower
+          lookupBy :: (a -> String) -> String -> [a] -> Maybe a
+          lookupBy f s [] = Nothing
+          lookupBy f s (a:as) | lc (f a) == lc s = Just a
+                              | otherwise        = lookupBy f s as
 
 pickDecks :: [Card] -> IO [Card]
-pickDecks cs = do let all = dominion ++ promos ++ intrigue ++ seaside
-               ||| add recommended deck sets. >>>
-    sets = filter ((==10).length.snd)
-                          (dominionSets++intrigueSets)
-               r <- randomRIO (1,100)
-               
-<<< add recommended deck sets. |||
-||| allow specifying cards on command line >>>
-       all' = all \\ cs
-                  
-<<< allow specifying cards on command line |||
-decks <- ||| add recommended deck sets. >>>
-if r > (10 :: Int)
-                        then 
-<<< add recommended deck sets. |||
-||| allow specifying cards on command line >>>
-(
-<<< allow specifying cards on command line |||
-take 10 . (cs++)) `fmap` shuffleIO ||| add recommended deck sets. >>>
-all
-                        else do (sn,d) <- head `fmap` shuffleIO sets
-                                putStrLn ("Using set "++sn)
-                                return d
-
-<<< add recommended deck sets. |||
-||| allow specifying cards on command line >>>
-all'
-   
-<<< allow specifying cards on command line |||
-               return $ sortBy (comparing cardPrice) decks
+pickDecks cs = do let sets = filter ((==10).length.snd) allRecommended
+                  r <- randomRIO (1,100)
+                  decks <- if r > (10 :: Int) || not (null cs)
+                           then (take 10 . (cs++)) `fmap` shuffleIO allDecks
+                           else do (sn,d) <- head `fmap` shuffleIO sets
+                                   putStrLn ("Using set "++sn)
+                                   return d
+                  return $ sortBy (comparing cardPrice) decks
 
 twoPlayer :: [Card] -> IO ()
 twoPlayer cs = do

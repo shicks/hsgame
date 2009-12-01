@@ -10,9 +10,6 @@ import Control.Monad.Error ( catchError )
 import Control.Monad ( when, unless, join, replicateM, forM, forM_,
                        zipWithM_ )
 import Data.Maybe ( listToMaybe, maybeToList, catMaybes, fromMaybe )
-||| Merge shicks >>>
-
-<<< Merge shicks |||
 import Data.List ( (\\), nubBy, partition )
 import Data.Function ( on )
 
@@ -29,26 +26,12 @@ affords :: Game (Int -> Card -> Bool)
 affords = do price <- withTurn $ gets priceMod
              return $ \p c -> price c <= p 
 
-||| Merge shicks >>>
-priceM :: Card -> Game Int
-priceM c = do price <- withTurn $ gets turnPriceMod
-              return $ price c
-
-distinctSupplies :: Game [Card]
-distinctSupplies = nubBy samename `fmap` allSupply
-    where samename a b = cardName a == cardName b
-
-
-<<< Merge shicks |||
-||| resolve conflicts >>>
 priceM :: Card -> Game Int
 priceM c = do withTurn $ ($c) `fmap` gets priceMod
 
 distinctSupplies :: Game [Card]
 distinctSupplies = nubBy sameName `fmap` allSupply
 
-
-<<< resolve conflicts |||
 supplyCosting :: (Int -> Bool) -> Game [Card]
 supplyCosting f = do price <- withTurn $ gets priceMod
                      sup <- distinctSupplies
@@ -129,33 +112,29 @@ intrigue = [baron, bridge, conspirator, coppersmith, courtyard,
 intrigueSets :: [(String, [Card])]
 intrigueSets =
     [("Underlings",
-     [-- baron, masquerade, minion, nobles, pawn, stewart
+     [baron, masquerade, minion, nobles, pawn, steward,
       cellar, festival, library, witch]),
      ("Hand Madness",
-      [-- minion, nobles, steward, torturer
-       bureaucrat, chancellor, councilRoom, courtyard, mine, militia ]),
+      [minion, nobles, steward, torturer, bureaucrat,
+       chancellor, councilRoom, courtyard, mine, militia ]),
      ("Deconstruction",
-      [-- bridge, miningVillage, sabateur, swindler, torturer,
+      [bridge, miningVillage, saboteur, swindler, torturer,
        remodel, secretChamber, spy, thief, throneRoom ]),
      ("Victory Dance",
-      [-- bridge, ironworks, masquerade, nobles, pawn, scout, upgrade, duke,
+      [bridge, ironworks, masquerade, nobles, pawn, scout, upgrade, duke,
        greatHall, harem ]),
      ("Secret Schemes",
-      [-- conspirator, ironworks, pawn, sabateur, shantyTown, steward,
-       -- swindler, tradingPost, upgrade, wishingWell,
-       harem ]),
+      [conspirator, ironworks, pawn, saboteur, shantyTown, steward,
+       swindler, tradingPost, upgrade, wishingWell, harem ]),
      ("Best Wishes",
-      [-- copperSmith, masquerade, scout, shantyTown, steward, torturer,
-       -- tradingPost, upgrade, wishingWell
-       courtyard ])
+      [coppersmith, masquerade, scout, shantyTown, steward, torturer,
+       tradingPost, upgrade, wishingWell, courtyard ])
     ]
 
-
-seaside :: [Card]  -- outpost, treasury, smugglers
+seaside :: [Card]  -- outpost, treasury, smugglers, .....
 seaside = [bazaar, caravan, fishingVillage, lookout, merchantShip,
            pearlDiver, salvager, tactician, warehouse, wharf]
 
-||| add recommended deck sets. >>>
 seasideSets :: [(String,[Card])]
 seasideSets =
     [("High Seas",
@@ -177,15 +156,13 @@ seasideSets =
       [ -- haven, island, salvager, ambassador, smugglers,
         fishingVillage, library, market, moneylender, witch])]
 
-
-<<< add recommended deck sets. |||
-||| allow specifying cards on command line >>>
 allDecks :: [Card]
 allDecks = dominion ++ promos ++ intrigue ++ seaside
 
+allRecommended :: [(String,[Card])]
+allRecommended = dominionSets ++ intrigueSets ++ seasideSets
 
-<<< allow specifying cards on command line |||
--- cards themselves
+-- base set
 adventurer :: Card
 adventurer = Card 0 6 "Adventurer" "..." [action $ getSelf >>= a ]
     where a self = finally (dig 0) $ discard self *<<< aside
@@ -336,9 +313,6 @@ thief = Card 0 4 "Thief" "..." [action a]
                 [c] <- askCards self ts (TrashBecause "thief") (1,1)
                 askMC self [("Steal",gain self discard *<< [c]),
                             ("Trash",trash << [c])] $ "Steal "++show c++"?"
-                ||| Merge shicks >>>
-when keep $ gain
-<<< Merge shicks ||| self discard *<< [c]
 
 -- TR and durations - FV=Fishing Village
 -- card (pred)    [self is always self]
