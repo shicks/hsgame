@@ -4,11 +4,12 @@ import Dominion.Types
 import Dominion.Stack
 import Dominion.Attack
 import Dominion.Question
+import Dominion.Message
 
 import Control.Monad.State ( gets, modify, liftIO )
 import Control.Monad.Error ( catchError )
 import Control.Monad ( when, unless, join, replicateM, forM, forM_,
-                       zipWithM_ )
+                       zipWithM_, (<=<) )
 import Data.Maybe ( listToMaybe, maybeToList, catMaybes, fromMaybe )
 import Data.List ( (\\), nubBy, partition )
 import Data.Function ( on )
@@ -189,9 +190,9 @@ bureaucrat = Card 0 4 "Bureaucrat" "..." [action a]
 
 cellar :: Card
 cellar = Card 0 2 "Cellar" "..." [action a]
-    where a = do (self,h,_) <- getSHP
+    where a = do self <- getSelf
                  plusAction 1
-                 cs <- askCards self h (DiscardBecause "cellar") (0,length h)
+                 cs <- askCardsHand (DiscardBecause "cellar") (0,-1)
                  discard self *<< cs
                  draw (length cs) self
 
@@ -204,9 +205,7 @@ chancellor = Card 0 3 "Chancellor" "..." [action a]
 
 chapel :: Card
 chapel = Card 0 2 "Chapel" "Trash up to 4 cards from your hand" [action a]
-    where a = do (self,h,_) <- getSHP
-                 cs <- askCards self h (TrashBecause "chapel") (0,4)
-                 trash << cs
+    where a = trash <# askCardsHand (TrashBecause "chapel") (0,4)
 
 councilRoom :: Card
 councilRoom = Card 0 5 "Council Room" "..." [action a]
@@ -282,10 +281,10 @@ moneylender = Card 0 3 "Moneylender" "..." [action $ try a]
 
 remodel :: Card
 remodel = Card 0 4 "Remodel" "..." [action $ try a]
-    where a = do (self,h,price) <- getSHP
-                 [c] <- askCards self h (TrashBecause "remodel") (1,1)
+    where a = do self <- getSelf
+                 [c] <- askCardsHand (TrashBecause "remodel") (1,1)
                  trash << [c]
-                 sup <- supplyCosting (<=(price c+2))
+                 sup <- supplyCosting . (>=) . (2+) =<< priceM c
                  gain self discard *<# askCards self sup SelectGain (1,1)
 
 smithy :: Card
@@ -434,9 +433,8 @@ coppersmith = Card 0 4 "Coppersmith" "..." [action a]
 courtyard :: Card
 courtyard = Card 0 2 "Courtyard" "..." [action a]
     where a = do plusCard 3
-                 (self,h,_) <- getSHP
-                 deck self *<# askCards self h 
-                               (UndrawBecause "courtyard") (1,1)
+                 self <- getSelf
+                 deck self *<# askCardsHand (UndrawBecause "courtyard") (1,1)
 
 duke :: Card
 duke = Card 0 5 "Duke" "..." [Victory, Score s]
@@ -472,8 +470,7 @@ masquerade = Card 0 3 "Masquerade" "..." [action a]
                                               (GiveAway "Pass left") (1,1)
                  ps' <- mapM getLHO ps
                  zipWithM_ (\p c -> hand p << c) ps' cs
-                 (self,h,_) <- getSHP
-                 trash <# askCards self h (TrashBecause "masquerade") (0,1)
+                 trash <# askCardsHand (TrashBecause "masquerade") (0,1)
 
 miningVillage :: Card
 miningVillage = Card 0 4 "Mining Village" "..." [Action a]
@@ -540,14 +537,12 @@ scout = Card 0 4 "Scout" "..." [action a]
 secretChamber :: Card
 secretChamber = Card 0 2 "Secret Chamber" "..." [action act,Reaction react]
     where react self cont = do draw 2 self
-                               h <- getStack $ hand self
-                               cs <- askCards self h
+                               cs <- askCardsHand
                                      (UndrawBecause "secret chamber") (2,2)
                                deck self *<< cs
                                cont
-          act = do (self,h,_) <- getSHP
-                   cs <- askCards self h (DiscardBecause "secret chamber")
-                         (0,length h)
+          act = do self <- getSelf
+                   cs <- askCardsHand (DiscardBecause "secret chamber") (0,-1)
                    discard self *<< cs
                    plusCoin $ length cs
 
@@ -563,9 +558,7 @@ steward = Card 0 3 "Steward" "..." [action $ getSelf >>= a]
                    [("+2 Cards",plusCard 2),
                     ("+2 Coins",plusCoin 2),
                     ("Trash 2 cards",tr)] -- maybe check if >=2 cards first?
-          tr = do (self,h,_) <- getSHP
-                  if length h<2 then a self else do
-                  trash <# askCards self h (TrashBecause "steward") (2,2)
+          tr = trash <# askCardsHand (TrashBecause "steward") (2,2)
 
 swindler :: Card
 swindler = Card 0 3 "Swindler" "..." [action a]
@@ -586,20 +579,14 @@ torturer = Card 0 5 "Torturer" "..." [action a]
                  attackNow "torturer" $ \_ opp -> try $ do
                    let curs = try $ gain opp hand << [curse]
                        disc = forceDiscard "torturer" opp 2
-                   h <- getStack $ hand opp
-                   c <- length `fmap` supplyCards (cardName curse)
-                   case () of
-                     _ | length h<2 -> curs
-                       | c==0       -> disc
-                       | otherwise ->
-                         askMC opp [("Discard 2 cards",disc),
-                                    ("Gain a Curse into hand",curs)]
-                                   "Choose one"
+                   askMC opp [("Discard 2 cards",disc),
+                              ("Gain a Curse into hand",curs)]
+                             "Choose one"
 
 tradingPost :: Card
 tradingPost = Card 0 5 "Trading Post" "..." [action a]
-    where a = do (self,h,_) <- getSHP
-                 cs <- askCards self h (TrashBecause "trading post") (2,2)
+    where a = do self <- getSelf
+                 cs <- askCardsHand (TrashBecause "trading post") (2,2)
                  trash << cs
                  when (length cs == 2) $ try $ gain self hand << [silver]
 
@@ -616,9 +603,9 @@ tribute = Card 0 5 "Tribute" "..." [action a]
 
 upgrade :: Card
 upgrade = Card 0 5 "Upgrade" "..." [action $ try a]
-    where a = do (self,h,price) <- getSHP
+    where a = do (self,_,price) <- getSHP
                  plusABCD 1 0 0 1
-                 [c] <- askCards self h (TrashBecause "upgrade") (1,1)
+                 [c] <- askCardsHand (TrashBecause "upgrade") (1,1)
                  sup <- supplyCosting (==(price c+1))
                  gain self discard *<# askCards self sup SelectGain (1,1)
 
@@ -670,10 +657,9 @@ pearlDiver = Card 0 2 "Pearl Diver" "..." [action $ try a]
 
 salvager :: Card
 salvager = Card 0 4 "Salvager" "..." [action a]
-    where a = do (self,h,price) <- getSHP
-                 plusBuy 1
-                 trash <# mapM_ (plusCoin . price) #<#
-                     askCards self h (TrashBecause "salvager") (1,1)
+    where a = do plusBuy 1
+                 trash <# mapM_ (plusCoin <=< priceM) #<#
+                     askCardsHand (TrashBecause "salvager") (1,1)
 
 tactician :: Card
 tactician = Card 0 5 "Tactician" "..." [duration a]
@@ -687,9 +673,8 @@ warehouse :: Card
 warehouse = Card 0 3 "Warehouse" "..." [action a]
     where a = do self <- getSelf
                  plusAction 1 >> draw 3 self
-                 h <- getStack $ hand self
                  discard self *<#
-                         askCards self h (DiscardBecause "warehouse") (3,3)
+                         askCardsHand (DiscardBecause "warehouse") (3,3)
 
 wharf :: Card
 wharf = Card 0 5 "Wharf" "..." [duration a]
