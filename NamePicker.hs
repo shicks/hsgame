@@ -2,19 +2,27 @@ module NamePicker ( pickNames, namedClient, simpleNamedClient ) where
 
 import TCP.Client ( Client, ioClient, forkClient )
 import TCP.ServerTypes ( ServerMessage(..), ServerModifier, ioConnector )
-import TCP.Chan ( ShowRead, writeOutput, readInput )
+import TCP.Chan ( ShowRead(..), writeOutput, readInput )
 import TCP.Message ( Message(..) )
 
 import Control.Concurrent ( forkIO )
 import Control.Monad ( forever )
 
 data NC name message = NamePrompt String | NC message
-                               deriving (Show, Read)
-instance (ShowRead name, ShowRead message) => ShowRead (NC name message)
+                       deriving ( Show, Read )
+instance (ShowRead name, ShowRead message) => ShowRead (NC name message) where
+    showLine (NamePrompt s) = ':': filter (/='\n') s
+    showLine (NC m) = showLine m
+    readLine (':':s) = Just (NamePrompt $ filter (/='\n') s)
+    readLine s = NC `fmap` readLine s
 
 data NS name message = MyNameIs name | NS message
                                deriving (Show, Read)
-instance (ShowRead name, ShowRead message) => ShowRead (NS name message)
+instance (ShowRead name, ShowRead message) => ShowRead (NS name message) where
+    showLine (MyNameIs n) = ':':showLine n
+    showLine (NS m) = showLine m
+    readLine (':':s) = MyNameIs `fmap` readLine s
+    readLine s = NS `fmap` readLine s
 
 simpleNamedClient :: (ShowRead toclient, ShowRead toserver) =>
                String -> Client toclient toserver
