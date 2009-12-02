@@ -591,8 +591,10 @@ torturer = Card 0 5 "Torturer" "..." [action a]
                    case () of
                      _ | length h<2 -> curs
                        | c==0       -> disc
-                   askMC opp [("Discard 2 cards",disc),
-                              ("Gain a Curse into hand",curs)] "Choose one"
+                       | otherwise ->
+                         askMC opp [("Discard 2 cards",disc),
+                                    ("Gain a Curse into hand",curs)]
+                                   "Choose one"
 
 tradingPost :: Card
 tradingPost = Card 0 5 "Trading Post" "..." [action a]
