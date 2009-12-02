@@ -270,14 +270,8 @@ allCards p = (concatMap isp . elems) `fmap` gets gameCards
     where isp (st,_,c) = case st of
                            SPId p' _ | p' == p -> [c]
                            _ -> []
-||| Merge spurious conflicts. >>>
-
-<<< Merge spurious conflicts. |||
-||| resolve conflicts >>>
 
 cardWhere :: Card -> Game StackName
 cardWhere c = do cs <- gets gameCards
                  let (s,_,_) = cs ! cardId c
                  return s
-
-<<< resolve conflicts |||

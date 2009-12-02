@@ -99,11 +99,5 @@ askCardsRepl filt p cs q (mn,mx) =
                 Just c -> test as $ filt c cs
                 Nothing -> False
           unCard a = case a of { PickCard c -> c; _ -> error "impossible" }
-||| Merge spurious conflicts. >>>
-
-<<< Merge spurious conflicts. |||
-||| resolve conflicts >>>
           fixPrice c = do p <- withTurn $ gets priceMod
                           return $ c { cardPrice = p c }
-
-<<< resolve conflicts |||

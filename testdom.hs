@@ -1,11 +1,6 @@
-||| Merge spurious conflicts. >>>
-
-<<< Merge spurious conflicts. |||
-||| resolve conflicts >>>
 {-# LANGUAGE PatternGuards #-}
 
 
-<<< resolve conflicts |||
 import Dominion
 
 import TCP.Message ( Message(..) )
@@ -229,7 +224,7 @@ main = getArgs >>= mainArgs []
 mainArgs :: [Card] -> [String] -> IO ()
 mainArgs cs as
     = case as of
-         [name@('m':'o':'n':_),hostname] ->
+        [name@('m':'o':'n':_),hostname] ->
              runClientTCP hostname 12345 $ simpleNamedClient name $ ioClient $
                           client (weightedBot wmoney) name
         [name@('b':'o':'t':'2':_),hostname] ->
@@ -255,41 +250,14 @@ mainArgs cs as
                               | otherwise        = lookupBy f s as
 
 pickDecks :: [Card] -> IO [Card]
-pickDecks cs = do let ||| add recommended deck sets. >>>
-all = dominion ++ promos ++ intrigue ++ seaside
-                   sets = filter ((==10).length.snd)
-                          (dominionSets++intrigueSets)
-               r <- randomRIO (1,100)
-               
-<<< add recommended deck sets. |||
-||| resolve conflicts >>>
-sets = filter ((==10).length.snd) allRecommended
+pickDecks cs = do let sets = filter ((==10).length.snd) allRecommended
                   r <- randomRIO (1,100)
-                  
-<<< resolve conflicts |||
-decks <- ||| add recommended deck sets. >>>
-if r > (10 :: Int)
-                        then 
-<<< add recommended deck sets. |||
-||| resolve conflicts >>>
-if r > (10 :: Int) || not (null cs)
-                           then (
-<<< resolve conflicts |||
-take 10 . (cs++)) `fmap` shuffleIO ||| add recommended deck sets. >>>
-all
-                        else do (sn,d) <- head `fmap` shuffleIO sets
-                                putStrLn ("Using set "++sn)
-                                return d
-
-<<< add recommended deck sets. |||
-||| resolve conflicts >>>
-allDecks
+                  decks <- if r > (10 :: Int) || not (null cs)
+                           then (take 10 . (cs++)) `fmap` shuffleIO allDecks
                            else do (sn,d) <- head `fmap` shuffleIO sets
                                    putStrLn ("Using set "++sn)
                                    return d
-   
-<<< resolve conflicts |||
-               return $ sortBy (comparing cardPrice) decks
+                  return $ sortBy (comparing cardPrice) decks
 
 twoPlayer :: [Card] -> IO ()
 twoPlayer cs = do
