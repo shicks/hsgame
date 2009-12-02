@@ -367,7 +367,7 @@ blackMarket = Card 0 3 "Black Market" "..." [Hook (SetupHook setup), action a]
                  tell self $ "Current money: "++show money
                  let f = do
                        [c] <- askCards self (filter (\c->price c<=money) cs)
-                              (OtherQuestion "black market buy") (0,1)
+                              (Gain "black market buy") (0,1)
                        let cost = price c
                            needed = if cost>coins
                                     then " (need "++show (cost-coins)++" more)"
@@ -395,7 +395,7 @@ envoy = Card 0 4 "Envoy" "..." [action a]
                 self <- getSelf
                 lho <- getLHO self
                 cs <-5<* deck self
-                [c] <- askCards lho cs (OtherQuestion "envoy discard") (1,1)
+                [c] <- askCards lho cs (Gain "envoy discard") (1,1)
                 discard self *<< [c]
                 hand self << filter (/=c) cs
 
@@ -469,7 +469,7 @@ masquerade = Card 0 3 "Masquerade" "..." [action a]
                  ps <- getAllPlayers
                  cs <- forM ps $ \p -> do h <- getStack $ hand p
                                           askCards p h
-                                              (OtherQuestion "Pass left") (1,1)
+                                              (GiveAway "Pass left") (1,1)
                  ps' <- mapM getLHO ps
                  zipWithM_ (\p c -> hand p << c) ps' cs
                  (self,h,_) <- getSHP
@@ -525,7 +525,7 @@ saboteur = Card 0 5 "Saboteur" "..." [action a]
                                         gain opp discard *<#
                                              askCards opp sup (q c) (1,1))
                          $ discard opp *<<< aside
-          q c = OtherQuestion $ "Trashed "++show c++": replacement?"
+          q c = GiveAway $ "Trashed "++show c++": replacement?"
 
 scout :: Card
 scout = Card 0 4 "Scout" "..." [action a]
@@ -578,7 +578,7 @@ swindler = Card 0 3 "Swindler" "..." [action a]
                    tell opp $ "Trashed "++show c
                    let q = "Trashed "++show c++": replacement?"
                    gain opp discard *<# -- not gain for purpose of smugglers...
-                        askCards self sup (OtherQuestion q) (1,1)
+                        askCards self sup (GiveAway q) (1,1)
 
 torturer :: Card
 torturer = Card 0 5 "Torturer" "..." [action a]

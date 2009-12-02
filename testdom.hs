@@ -102,68 +102,72 @@ stdioClient name = client (stateToPlayer status info answer "") name
                            spaces++name++spaces,
                            replicate 40 '-',""]
 
+wantBad :: QuestionMessage -> Bool
+wantBad (GiveAway _) = True
+wantBad (TrashBecause _) = True
+wantBad _ = False
+
+wantUseless :: QuestionMessage -> Bool
+wantUseless (DiscardBecause _) = True
+wantUseless _ = False
+
 weights :: QuestionMessage -> Answer -> Double
-weights (TrashBecause _) (PickCard c)
-        | cname c == "Curse" = 1000
-        | cname c == "Estate" = 20
-        | cname c == "Copper" = 2
-        | otherwise = 0
-weights (DiscardBecause _) (PickCard c)
-        | cname c == "Curse" = 100
-        | cname c == "Estate" = 100
-        | cname c == "Duchy" = 100
+weights q (PickCard c)
+        | wantBad q && cname c == "Curse" = 1000
+        | wantBad q && cname c == "Estate" = 20
+        | wantBad q && cname c == "Copper" = 2
+        | wantBad q = 0
+        | wantUseless q && cname c == "Curse" = 100
+        | wantUseless q && cname c == "Estate" = 100
+        | wantUseless q && cname c == "Duchy" = 100
+        | wantUseless q && cname c == "Province" = 100
+        | wantUseless q && cname c == "Copper" = 3
+        | wantUseless q = 0
+        | cname c == "Cellar" = 0
         | cname c == "Province" = 100
-        | cname c == "Copper" = 3
-        | cname c == "Gold" = 0
-        | cname c == "Village" = 0
-        | cname c == "Bazaar" = 0
-        | cname c == "Market" = 0
-        | otherwise = 0
-weights _ (PickCard c) | cname c == "Cellar" = 0
-                       | cname c == "Province" = 100
-                       | cname c == "Gold" = 40
-                       | cname c == "Silver" = 10
-                       | cname c == "Warehouse" = 0
-                       | cname c == "Copper" = 0
-                       | cname c == "Curse" = 0
-                       | cname c == "Estate" = 0
-                       | cname c == "Chancellor" = 0
-                       | cname c == "Bureaucrat" = 0
-                       | cname c == "Chapel" = 0.1
-                       | cname c == "Council Room" = 0.3
-                       | cname c == "Feast" = 1.5
-                       | cname c == "Festival" = 7
-                       | cname c == "Laboratory" = 7
-                       | cname c == "Market" = 7
-                       | cname c == "Militia" = 2
-                       | cname c == "Mine" = 2
-                       | cname c == "Village" = 6
-                       | cname c == "Smithy" = 7
-                       | cname c == "Spy" = 0
-                       | cname c == "Courtyard" = 0
-                       | cname c == "Thief" = 2
+        | cname c == "Gold" = 40
+        | cname c == "Silver" = 10
+        | cname c == "Warehouse" = 0
+        | cname c == "Copper" = 0
+        | cname c == "Curse" = 0
+        | cname c == "Estate" = 0
+        | cname c == "Chancellor" = 0
+        | cname c == "Bureaucrat" = 0
+        | cname c == "Chapel" = 0.1
+        | cname c == "Council Room" = 0.3
+        | cname c == "Feast" = 1.5
+        | cname c == "Festival" = 7
+        | cname c == "Laboratory" = 7
+        | cname c == "Market" = 7
+        | cname c == "Militia" = 2
+        | cname c == "Mine" = 2
+        | cname c == "Village" = 6
+        | cname c == "Smithy" = 7
+        | cname c == "Spy" = 0
+        | cname c == "Courtyard" = 0
+        | cname c == "Thief" = 2
 weights _ _ = 1
 
 wmoney :: QuestionMessage -> Answer -> Double
-wmoney (TrashBecause _) (PickCard c)
-    | cname c == "Curse" = 1000
-    | cname c == "Estate" = 20
-    | cname c == "Duchy" = 5
-    | cname c == "Copper" = 2
-    | cname c == "Silver" = 0.01
-    | otherwise = 0
-wmoney (DiscardBecause _) (PickCard c) | cname c == "Curse" = 100
-                                       | cname c == "Estate" = 100
-                                       | cname c == "Duchy" = 100
-                                       | cname c == "Province" = 100
-                                       | cname c == "Copper" = 3
-                                       | cname c == "Silver" = 0.5
-                                       | otherwise = 0
-wmoney _ (PickCard c) | cname c == "Province" = 1000
-                      | cname c == "Harem" = 80
-                      | cname c == "Gold" = 40
-                      | cname c == "Silver" = 2
-                      | cname c == "Duchy" = 0.1
+wmoney q (PickCard c)
+    | wantBad q && cname c == "Curse" = 1000
+    | wantBad q && cname c == "Estate" = 20
+    | wantBad q && cname c == "Duchy" = 5
+    | wantBad q && cname c == "Copper" = 2
+    | wantBad q && cname c == "Silver" = 0.01
+    | wantBad q = 0
+    | wantUseless q && cname c == "Curse" = 100
+    | wantUseless q && cname c == "Estate" = 100
+    | wantUseless q && cname c == "Duchy" = 100
+    | wantUseless q && cname c == "Province" = 100
+    | wantUseless q && cname c == "Copper" = 3
+    | wantUseless q && cname c == "Silver" = 0.5
+    | wantUseless q = 0
+    | cname c == "Province" = 1000
+    | cname c == "Harem" = 80
+    | cname c == "Gold" = 40
+    | cname c == "Silver" = 2
+    | cname c == "Duchy" = 0.1
 wmoney _ _ = 0
 
 weightedBot :: (QuestionMessage -> Answer -> Double) -> PlayerFunctions

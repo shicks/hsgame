@@ -197,6 +197,8 @@ data QuestionMessage
     | SelectSupply String | SelectBuys | SelectGain  -- from supply
     | DiscardBecause String | UndrawBecause String   -- maybe Card instead?
     | TrashBecause String
+    | GiveAway String                                -- e.g. Masquerade
+    | Gain String                                    -- e.g. black market
     | OtherQuestion String                           -- e.g. envoy?
     deriving ( Show, Read )
 
