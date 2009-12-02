@@ -12,7 +12,7 @@ module Dominion.Stack ( OStack, UStack, IStack, printStack,
                         defaultGain, gain, cardWhere ) where
 
 import Dominion.Types
-import Dominion.Question
+import Dominion.Message
 
 import Prelude hiding ( mod )
 
@@ -95,6 +95,8 @@ unorderedStack sn = UStack { uAddToStack = add, uGetStack = gs,
                           then [(x,c)]
                           else []
 
+class InputStack s where
+    modifyInput :: ([Card] -> Game [Card]) -> s -> s
 class NamedStack s where
     stackName :: s -> StackName
 class OrderedInputStack s where
@@ -116,12 +118,17 @@ instance OutputStack OStack where
     unorderedGetStack = oGetStack
 instance NamedStack OStack where
     stackName = oStackName
+instance InputStack OStack where
+    modifyInput f (OStack att atb gs sn) = OStack (f>=>att) (f>=>atb) gs sn
+
 instance UnorderedInputStack UStack where
     addToStack = uAddToStack
 instance OutputStack UStack where
     unorderedGetStack = uGetStack
 instance NamedStack UStack where
     stackName = uStackName
+instance InputStack UStack where
+    modifyInput f (UStack add gs sn) = UStack (f>=>add) gs sn
 
 get :: OutputStack s => Int -> s -> Game [Card]
 get = flip unorderedGetStack
@@ -203,9 +210,11 @@ infix 1 .<<<, *<<<, <<<
 (<<<) to from = get 0 from >>= (to<<)
 
 draw :: Int -> PId -> Game ()
-draw n p = do hand p <#n<* deck p
-              h <- get 0 $ hand p -- put these in the stack modifiers now...
-              tell p $ "Drew cards: hand="++show (h::[Card]) -- improve...
+draw n p = do cs <-n<* deck p
+              hand p << cs
+              name <- withPlayer p $ gets playerName
+              tellP p $ CardDraw name $ Right $ map describeCard cs
+              tellOppOf p $ CardDraw name $ Left $ length cs
 
 hand :: PId -> UStack
 hand p = unorderedStack (SPId p "hand")
@@ -232,7 +241,9 @@ durations :: PId -> UStack
 durations p = unorderedStack $ SPId p "durations"
 
 played :: UStack
-played = unorderedStack $ SN "turnPlayed"
+played = modifyInput (thread f) $ unorderedStack $ SN "turnPlayed"
+    where f cs = do n <- getSelf >>= withPlayer `flip` gets playerName
+                    tellAll $ CardPlay n $ map describeCard cs
 
 prevDuration :: UStack
 prevDuration = unorderedStack $ SN "prev-duration"
@@ -275,3 +286,6 @@ cardWhere :: Card -> Game StackName
 cardWhere c = do cs <- gets gameCards
                  let (s,_,_) = cs ! cardId c
                  return s
+
+thread :: Monad m => (a -> m b) -> a -> m a
+thread f a = f a >> return a

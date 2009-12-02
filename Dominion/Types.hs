@@ -191,7 +191,15 @@ data ResponseFromClient = ResponseFromClient QId [Answer]
                           deriving ( Show, Read )
 instance ShowRead ResponseFromClient
 
-data InfoMessage = InfoMessage String        deriving ( Show, Read )
+data InfoMessage = InfoMessage String
+                 | GameOver String
+                 | CardPlay String [CardDescription] -- first String is player
+                 | CardDraw String (Either Int [CardDescription]) -- may not be public
+                 | CardDiscard String [CardDescription]
+                 | CardTrash String [CardDescription]
+                 | CardReveal String [CardDescription] String -- from where?
+                 | CardBuy String [CardDescription]
+                 deriving ( Show, Read )
 data QuestionMessage
     = SelectAction | SelectReaction String           -- from hand
     | SelectSupply String | SelectBuys | SelectGain  -- from supply

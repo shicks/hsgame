@@ -3,6 +3,7 @@ module Dominion.Game ( start, play ) where
 import Dominion.Types
 import Dominion.Cards
 import Dominion.Question
+import Dominion.Message
 import Dominion.Stack
 
 import Control.Concurrent ( forkIO )
@@ -72,10 +73,10 @@ play = do winner <- endGame
                        let ps = map fromIntegral [0..np-1]
                        names <- mapM (\p -> withPlayer p $ gets playerName) ps
                        scores <- (zip names) `fmap` mapM playerScore ps
-                       let scoreannouncement =
+                       let scoreannouncement = GameOver $
                                unlines ("Game over!": map show scores)
-                       mapM_ (`tell` scoreannouncement) ps
-                       liftIO $ putStrLn scoreannouncement
+                       mapM_ (`tellP` scoreannouncement) ps
+                       liftIO $ print scoreannouncement
                        return $ Just scores
           playerScore :: PId -> Game Int
           playerScore p = do cs <- allCards p
@@ -121,7 +122,11 @@ turn = do self <- gets currentTurn
                    sup <- supplyCosting (<=money)
                    cs <- askCards' self sup SelectBuys (0,buys)
                    totalCost <- sum `fmap` mapM priceM cs
-                   if totalCost <= money then gain self discard *<< cs
+                   if totalCost <= money then do name <- withPlayer self $
+                                                         gets playerName
+                                                 gain self discard *<< cs
+                                                 tellAll $ CardBuy name $
+                                                         map describeCard cs
                                          else buy self buys money
           duration self = do prevDuration <<< durations self
                              withPlayer self (gets durationEffects)
