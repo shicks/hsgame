@@ -133,4 +133,5 @@ turn = do self <- gets currentTurn
                                   discard self *<<< hand self
           cleanup self = do let rep = cleanupStacks self >> doTurn self
                             mapM_ ($rep) =<< withTurn (gets cleanupHooks)
+                            cleanupStacks self
                             draw 5 self
