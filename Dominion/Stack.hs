@@ -5,7 +5,7 @@ module Dominion.Stack ( OStack, UStack, IStack, printStack,
                         (*<<), (.<<), (<<), (*<#), (.<#), (<#),
                         (<*), (<.), (*<<<), (.<<<), (<<<), (#<), (#<#),
                         stackName, getStack, top, bottom,
-                        shuffle, shuffleIO,
+                        shuffle, shuffleIO, supply,
                         draw, hand, deck, discard, mat, trash,
                         durations, played, prevDuration, aside,
                         allSupply, supplyCards, inSupply, allCards,
@@ -285,7 +285,10 @@ trash = modifyInput (thread f) $ unorderedStack $ SN "trash"
                                               ss' = map (describeCard.snd) ss
                                           tellAll $ CardTrash p ss'
 
-allSupply :: Game [Card]
+supply :: UStack -- messages?
+supply = unorderedStack $ SN "supply"
+
+allSupply :: Game [Card] -- rewrite in terms of supply?
 allSupply = (concatMap iss . elems) `fmap` gets gameCards
     where iss (SN "supply",_,c) = [c]
           iss _ = []
