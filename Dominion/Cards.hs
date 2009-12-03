@@ -132,8 +132,10 @@ intrigueSets =
     ]
 
 seaside :: [Card]  -- outpost, treasury, smugglers, .....
-seaside = [bazaar, caravan, embargo, fishingVillage, lookout, merchantShip,
-           nativeVillage, pearlDiver, salvager, tactician, warehouse, wharf]
+seaside = [bazaar, caravan, embargo,
+           fishingVillage, lookout, merchantShip,
+           nativeVillage, outpost, pearlDiver,
+           salvager, tactician, warehouse, wharf]
 
 seasideSets :: [(String,[Card])]
 seasideSets =
@@ -677,6 +679,13 @@ nativeVillage = Card 0 2 "Native Village" "..." [action a]
                              tellSelf $ InfoMessage $ "Native Village Mat: "++
                                       intercalate ", " cs
           nvMat = mat "nativeVillage"
+
+outpost :: Card
+outpost = Card 0 5 "Outpost" "..." [duration a]
+    where a = do self <- getSelf
+                 cur <- getStack prevDuration
+                 unless (any (sameName outpost) cur) $
+                   withTurn $ modify $ \s -> s { nextTurnHook = \_->plusCard 3 }
 
 pearlDiver :: Card
 pearlDiver = Card 0 2 "Pearl Diver" "..." [action $ try a]
