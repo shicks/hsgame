@@ -125,7 +125,8 @@ turn = do self <- gets currentTurn
                                                          gets playerName
                                                  gainSilent self discard *<< cs
                                                  runBuyHooks self cs
-                                                 tellAll $ CardBuy name $
+                                                 when (not $ null cs) $
+                                                      tellAll $ CardBuy name $
                                                          map describeCard cs
                                          else attemptBuy self buys money
           duration self = do prevDuration <<< durations self

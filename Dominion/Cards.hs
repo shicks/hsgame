@@ -132,8 +132,8 @@ intrigueSets =
     ]
 
 seaside :: [Card]  -- outpost, treasury, smugglers, .....
-seaside = [bazaar, caravan, embargo,
-           fishingVillage, lookout, merchantShip,
+seaside = [ambassador, bazaar, caravan, embargo,
+           fishingVillage, haven, lighthouse, lookout, merchantShip,
            nativeVillage, outpost, pearlDiver,
            salvager, tactician, warehouse, wharf]
 
@@ -627,6 +627,21 @@ wishingWell = Card 0 3 "Wishing Well" "..." [action $ try a]
 
 -- Seaside cards
 
+ambassador :: Card
+ambassador = Card 0 3 "Ambassador" "..." [action $ try a]
+    where a = do att <- attack "ambassador"
+                 (self,h,_) <- getSHP
+                 [c] <- askCards self h (GiveAway "ambassador") (1,1)
+                 let n = length $ filter (sameName c) h
+                     opts2 = if n>1 then [("2",return 2)] else []
+                     opts = ("0",return 0):("1",return 1):opts2
+                 name <- withPlayer self $ gets playerName
+                 num <- askMC self opts "Return how many?"
+                 tellAll $ InfoMessage $ name++" ungained "++show num
+                                         ++" copies of "++cardName c
+                 supply << take num (filter (sameName c) h)
+                 att $ \_ opp -> gain opp discard *<< [c]
+
 bazaar :: Card
 bazaar = Card 0 5 "Bazaar" "..." [action $ plusABCD 2 0 1 1]
 
@@ -647,6 +662,18 @@ embargo = Card 0 2 "Embargo" "..." [oneShot $ try a]
 fishingVillage :: Card
 fishingVillage = Card 0 3 "Fishing Village" "..." [duration a]
     where a = plusABCD 2 0 1 0 >> nextTurn (plusABCD 1 0 1 0)
+
+haven :: Card
+haven = Card 0 2 "Haven" "..." [duration $ try $ getSelf >>= a]
+    where a self = do plusABCD 1 0 0 1
+                      [c] <- askCardsHand (OtherQuestion "haven") (1,1)
+                      durations self << [c]
+                      nextTurn $ hand self << [c]
+
+lighthouse :: Card
+lighthouse = Card 0 2 "Lighthouse" "..." [duration a,DReaction r]
+    where a = plusABCD 1 0 1 0 >> nextTurn (plusCoin 1) 
+          r _ _ = return $ \_ _ _ -> return ()
 
 lookout :: Card
 lookout = Card 0 3 "Lookout" "..." [action $ try a]

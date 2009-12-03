@@ -145,6 +145,7 @@ data CardType
     | Victory
     | Treasure Int
     | Reaction Reaction
+    | DReaction Reaction
     | Score (Int -> Game Int)
     | Hook HookType
 
