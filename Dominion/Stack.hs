@@ -8,7 +8,8 @@ module Dominion.Stack ( OStack, UStack, IStack, printStack,
                         shuffle, shuffleIO, supply,
                         draw, hand, deck, discard, mat, trash,
                         durations, played, prevDuration, aside,
-                        allSupply, supplyCards, inSupply, allCards,
+                        allSupply, supplyCards, inSupply, inTrash,
+                        allCards,
                         gain, gain', gainSilent,
                         revealHand, revealCards,
                         cardWhere ) where
@@ -298,6 +299,10 @@ supplyCards c = filter (sameName c) `fmap` allSupply
 
 inSupply :: Card -> Game Bool
 inSupply c = (not . null) `fmap` supplyCards c
+
+inTrash :: Card -> Game Bool
+inTrash c = do loc <- cardWhere c
+               return $ loc == stackName trash
 
 -- *this is a funny distinction.  @gain@ will be used only for
 -- gaining cards from the supply, while @gain'@ will be used for
