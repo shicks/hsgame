@@ -3,7 +3,9 @@ module Dominion.Attack ( attack, attackNow ) where
 import Dominion.Types
 import Dominion.Question
 import Dominion.Stack
+import Dominion.Message ( tellAll )
 
+import Control.Monad.Error ( catchError )
 import Control.Monad.State ( gets )
 
 isReaction :: Card -> Bool
@@ -12,6 +14,9 @@ isReaction c = not $ null [() | Reaction _ <- cardType c]
 getReaction :: Card -> Reaction -- unsafe!
 getReaction c = head [r | Reaction r <- cardType c]
 
+-- put some stuff here to say whether order matters, once we start
+-- parallelizing the attacks.
+
 attack :: String -> Game (Attack -> Game ())
 attack name = do self <- getSelf
                  n <- gets $ length . gamePlayers
@@ -19,10 +24,13 @@ attack name = do self <- getSelf
                  let react :: PId -> Game (Attack -> Attack)
                      react p = do h <- getStack $ hand p
                                   let rs = filter isReaction h
-                                  r <- askCards p rs (SelectReaction name)
-                                       (0,1)
-                                  if null r then return id else do
-                                  getReaction (head r) p (react p)
+                                  catchError `flip` (\_ -> return id) $ do
+                                    [r] <- askCards p rs (SelectReaction name)
+                                           (0,1)
+                                    name <- withPlayer p $ gets playerName
+                                    tellAll $ CardReveal name
+                                                [describeCard r] "hand"
+                                    getReaction r p (react p)
                  rs <- mapM react opps
                  let att a = mapM_ (\(p,r) -> r a self p) $ zip opps rs
                  return att

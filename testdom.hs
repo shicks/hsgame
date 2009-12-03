@@ -81,6 +81,8 @@ instance Pretty InfoMessage where
     pretty (CardTrash p cs) = p ++ " trashed " ++ pretty cs
     pretty (CardReveal p cs f) = p ++ " revealed " ++ pretty cs ++ " from " ++ f
     pretty (CardBuy p cs) = p ++ " bought " ++ pretty cs
+    pretty (CardGain p cs) = p ++ " gained " ++ pretty cs
+    pretty (Reshuffled p) = p ++ " reshuffled"
     pretty s = show s -- prevent crashing when we add message types
 instance Pretty Answer where
     pretty (Choose s) = s
@@ -88,7 +90,7 @@ instance Pretty Answer where
 
 stdioClient :: String -> Input MessageToClient -> Output ResponseFromClient -> IO ()
 stdioClient name = client (stateToPlayer status info answer "") name
-    where status = liftIO . hPutStrLn stderr
+    where status _ = return () -- status = liftIO . hPutStrLn stderr
           info (GameOver m) = liftIO $ putStrLn m >> exitWith ExitSuccess
           info m = modify (++(pretty m++"\n"))
           answer :: QuestionMessage -> [Answer] -> (Int,Int) -> StateT String IO [Answer]

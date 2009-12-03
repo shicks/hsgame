@@ -11,8 +11,7 @@ import Control.Monad.Error ( catchError )
 import Control.Monad ( when, unless, join, replicateM, forM, forM_,
                        zipWithM_, (<=<) )
 import Data.Maybe ( listToMaybe, maybeToList, catMaybes, fromMaybe )
-import Data.List ( (\\), nubBy, partition )
-import Data.Function ( on )
+import Data.List ( (\\), nubBy, partition, intercalate )
 
 -- import Control.Monad.Trans ( liftIO ) -- for debugging!
 
@@ -133,8 +132,8 @@ intrigueSets =
     ]
 
 seaside :: [Card]  -- outpost, treasury, smugglers, .....
-seaside = [bazaar, caravan, fishingVillage, lookout, merchantShip,
-           pearlDiver, salvager, tactician, warehouse, wharf]
+seaside = [bazaar, caravan, embargo, fishingVillage, lookout, merchantShip,
+           nativeVillage, pearlDiver, salvager, tactician, warehouse, wharf]
 
 seasideSets :: [(String,[Card])]
 seasideSets =
@@ -171,6 +170,7 @@ adventurer = Card 0 6 "Adventurer" "..." [action $ getSelf >>= a ]
           dig 2 = return ()
           dig n = do self <- getSelf
                      [c] <-1<* deck self
+                     revealCards self [c] "deck"
                      if isTreasure c
                         then do hand self << [c]
                                 dig (n+1)
@@ -182,8 +182,9 @@ bureaucrat = Card 0 4 "Bureaucrat" "..." [action a]
     where a = do attackNow "bureaucrat" $ \self opp -> try $ do
                    h <- getStack $ hand opp
                    let vs = filter isVictory h
-                   if null vs then return () else do -- reveal hand...?
+                   if null vs then revealHand opp else do -- reveal hand...?
                    [c] <- askCards opp vs (UndrawBecause "bureaucrat") (1,1)
+                   revealCards opp [c] "hand"
                    deck opp *<< [c]
                  self <- getSelf
                  try $ gain self deck *<< [silver]
@@ -311,7 +312,7 @@ thief = Card 0 4 "Thief" "..." [action a]
                 let (ts,nts) = partition isTreasure cs
                 discard opp *<< nts
                 [c] <- askCards self ts (TrashBecause "thief") (1,1)
-                askMC self [("Steal",gain self discard *<< [c]),
+                askMC self [("Steal",gain' self discard *<< [c]),
                            ("Trash",trash << [c])] $ "Steal "++show c++"?"
 
 -- TR and durations - FV=Fishing Village
@@ -380,7 +381,7 @@ blackMarket = Card 0 3 "Black Market" "..." [Hook (SetupHook setup), action a]
                        coins' <- withTurn $ gets turnCoins
                        if cost <= coins'
                           then do plusCoin (-cost)
-                                  discard self *<< [c] -- only gain from supply
+                                  gain' self discard *<< [c]
                                   return [c]
                           else return []
                  buy <- catchError f (\_ -> return [])
@@ -394,6 +395,7 @@ envoy = Card 0 4 "Envoy" "..." [action a]
                 self <- getSelf
                 lho <- getLHO self
                 cs <-5<* deck self
+                revealCards self cs "deck"
                 [c] <- askCards lho cs (Gain "envoy discard") (1,1)
                 discard self *<< [c]
                 hand self << filter (/=c) cs
@@ -529,6 +531,7 @@ scout = Card 0 4 "Scout" "..." [action a]
     where a = do self <- getSelf
                  plusAction 1
                  cs <-4<* deck self
+                 revealCards self cs "deck"
                  let (v,nv) = partition isVictory cs
                      n = length nv
                  hand self << v
@@ -548,8 +551,10 @@ secretChamber = Card 0 2 "Secret Chamber" "..." [action act,Reaction react]
 
 shantyTown :: Card
 shantyTown = Card 0 3 "Shanty Town" "..." [action a]
-    where a = do plusAction 2
-                 as <- filter isAction `fmap` (getStack . hand =<< getSelf)
+    where a = do self <- getSelf
+                 plusAction 2
+                 revealHand self
+                 as <- filter isAction `fmap` (getStack $ hand self)
                  when (null as) $ plusCard 2 
 
 steward :: Card
@@ -627,6 +632,16 @@ caravan :: Card
 caravan = Card 0 4 "Caravan" "..." [duration a]
     where a = plusABCD 1 0 0 1 >> nextTurn (plusCard 1)
 
+embargo :: Card  -- can we hook into the the card's show for supply?!?
+embargo = Card 0 2 "Embargo" "..." [oneShot $ try a]
+    where a = do self <- getSelf
+                 plusCoin 2
+                 sup <- supplyCosting $ \_ -> True -- all piles
+                 [c] <- askCards self sup (OtherQuestion "embargo") (1,1)
+                 modify $ \s -> s { hookBuy = hook c:hookBuy s }
+          hook e p cs = forM_ cs $ \c -> when (sameName c e) $
+                                         gain p discard *<< [curse]
+
 fishingVillage :: Card
 fishingVillage = Card 0 3 "Fishing Village" "..." [duration a]
     where a = plusABCD 2 0 1 0 >> nextTurn (plusABCD 1 0 1 0)
@@ -646,6 +661,22 @@ lookout = Card 0 3 "Lookout" "..." [action $ try a]
 merchantShip :: Card
 merchantShip = Card 0 5 "Merchant Ship" "..." [duration a]
     where a = plusCoin 2 >> nextTurn (plusCoin 2)
+
+nativeVillage :: Card
+nativeVillage = Card 0 2 "Native Village" "..." [action a]
+    where a = do self <- getSelf
+                 plusAction 2
+                 cs <- map cardName `fmap` getStack (nvMat self)
+                 tellSelf $ InfoMessage $ "Native Village Mat: "++
+                          intercalate ", " cs
+                 askMC self `flip` "Choose one" $
+                           [("Set aside",setAside self),
+                            ("Draw from mat",hand self <<< nvMat self)]
+          setAside self = do nvMat self *<#1<* deck self
+                             cs <- map cardName `fmap` getStack (nvMat self)
+                             tellSelf $ InfoMessage $ "Native Village Mat: "++
+                                      intercalate ", " cs
+          nvMat = mat "nativeVillage"
 
 pearlDiver :: Card
 pearlDiver = Card 0 2 "Pearl Diver" "..." [action $ try a]
@@ -725,9 +756,6 @@ getAction c = mapM_ id [a c Nothing | Action a <- cardType c]
 getActionPred :: Card -> Card -> Game ()
 getActionPred pred c = foldl (>>) (return ())
                        [a c (Just pred) | Action a <- cardType c]
-
-sameName :: Card -> Card -> Bool
-sameName = (==) `on` cardName
 
 finally :: Game () -> Game () -> Game ()
 finally job after = try job >> after
