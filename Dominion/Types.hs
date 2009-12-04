@@ -8,11 +8,12 @@ module Dominion.Types ( GameState(..), PlayerState(..), Game,
                         MessageToServer(..), RegisterQuestionMessage(..),
                         MessageToClient(..), ResponseFromClient(..),
                         Card(..), CardType(..), HookType(..),
-                        runSetupHooks,
+                        runSetupHooks, runTurnHooks,
+                        runGainHooks, runBuyHooks,
                         Answer(..), pickCard,
                         CardDescription(..), describeCard, lookupCard,
                         QuestionMessage(..), InfoMessage(..),
-                        newQId,
+                        newQId, sameName,
                         getSelf, getLHO, getRHO, getOpponents, getAllPlayers,
                         Attack, Reaction,
                         QId, CId, PId(..) ) where
@@ -25,6 +26,7 @@ import Control.Monad.Error ( MonadError, Error(..),
 import Control.Monad.Trans ( MonadIO, liftIO )
 import Control.Monad ( when )
 import Data.Array ( Array, Ix )
+import Data.Function ( on )
 
 -- Plan: throw in an ErrorT on the outside, so that we can use
 -- a "try" structure to catch pattern match errors:
@@ -80,15 +82,16 @@ data GameState = GameState {
       gameCards    :: Array CId (StackName, Integer, Card),
       currentTurn  :: PId,
       turnState    :: TurnState,
---      hookGain     :: PId -> Card -> Game (),  {- for smuggler -}
---      hookBuy      :: PId -> Card -> Game (),  {- for embargo, treasury -}
+      hookGain     :: [PId -> [Card] -> Game ()],  {- for smuggler -}
+      hookBuy      :: [PId -> [Card] -> Game ()],  {- for embargo, treasury -}
+      hookTurn     :: [PId -> Game ()],            {- bookkeeping -}
       inputChan    :: Input MessageToServer,
       outputChan   :: Output RegisterQuestionMessage,
       _qIds        :: [QId]  -- [QId 0..]
     }
 
 data StackName = SN String | SPId PId String
-                 deriving ( Eq )
+                 deriving ( Show, Eq )
 
 data PlayerState = PlayerState {
       playerId        :: PId,
@@ -103,7 +106,8 @@ data TurnState = TurnState {
       turnCoins    :: Int,
       priceMod     :: Card -> Int,
       treasureMod  :: Card -> Int,
-      cleanupHooks :: [Game () -> Game ()]
+      cleanupHooks :: [Game ()],
+      nextTurnHook :: Game () -> Game ()
         -- ORDERED: treasury first, then outpost
         -- outpost needs to know how to take another turn
         -- treasury needs to know whether we bought a victory... :-/
@@ -141,6 +145,7 @@ data CardType
     | Victory
     | Treasure Int
     | Reaction Reaction
+    | DReaction Reaction
     | Score (Int -> Game Int)
     | Hook HookType
 
@@ -155,6 +160,15 @@ data HookType = SetupHook ([Card] -> Game ())
 
 runSetupHooks :: [Card] -> Card -> Game ()
 runSetupHooks cs c = mapM_ ($cs) [g | Hook (SetupHook g) <- cardType c]
+
+runTurnHooks :: PId -> Game ()
+runTurnHooks p = gets hookTurn >>= mapM_ ($p)
+
+runGainHooks :: PId -> [Card] -> Game ()
+runGainHooks p cs = gets hookGain >>= mapM_ (\f -> f p cs)
+
+runBuyHooks :: PId -> [Card] -> Game ()
+runBuyHooks p cs = gets hookBuy >>= mapM_ (\f -> f p cs)
 
 -- *How to actually perform the attack.  This is slightly tricky, since
 -- some attacks depend on choices made by attacker...
@@ -191,7 +205,17 @@ data ResponseFromClient = ResponseFromClient QId [Answer]
                           deriving ( Show, Read )
 instance ShowRead ResponseFromClient
 
-data InfoMessage = InfoMessage String        deriving ( Show, Read )
+data InfoMessage = InfoMessage String
+                 | GameOver String
+                 | CardPlay String [CardDescription] -- first String is player
+                 | CardDraw String (Either Int [CardDescription]) -- public?
+                 | CardDiscard String [CardDescription]
+                 | CardTrash String [CardDescription]
+                 | CardReveal String [CardDescription] String -- from where?
+                 | CardGain String [CardDescription]
+                 | CardBuy String [CardDescription]
+                 | Reshuffled String
+                 deriving ( Show, Read )
 data QuestionMessage
     = SelectAction | SelectReaction String           -- from hand
     | SelectSupply String | SelectBuys | SelectGain  -- from supply
@@ -253,6 +277,9 @@ getAllPlayers = do n <- gets $ length . gamePlayers
 
 fromPId :: PId -> Game PlayerState
 fromPId p = withPlayer p $ gets id
+
+sameName :: Card -> Card -> Bool
+sameName = (==) `on` cardName
 
 -- class Player p where
 --     toP :: p -> Game PId
