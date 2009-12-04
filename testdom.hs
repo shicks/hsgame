@@ -169,6 +169,13 @@ weights q (PickCard c)
 weights _ _ = 1
 
 wmoney :: QuestionMessage -> Answer -> Double
+wmoney SelectAction (PickCard c) | cname c == "Chapel" = 1000
+                                 | cname c == "Moneylender" = 1000
+                                 | cname c == "Village" = 10000
+                                 | cname c == "Market" = 10000
+                                 | cname c == "Pearl Diver" = 10000
+                                 | cname c == "Great Hall" = 10000
+                                 | cname c == "Smithy" = 100
 wmoney q (PickCard c)
     | wantBad q && cname c == "Curse" = 1000
     | wantBad q && cname c == "Estate" = 20
@@ -189,6 +196,20 @@ wmoney q (PickCard c)
     | cname c == "Silver" = 2
     | cname c == "Duchy" = 0.1
 wmoney _ _ = 0
+
+strategyBot :: (QuestionMessage -> Answer -> Double) -> PlayerFunctions
+strategyBot weight = PlayerFunctions status info answer
+    where status x = putStrLn x >> return (strategyBot weight)
+          info (GameOver m) = putStrLn m >> exitWith ExitSuccess
+          info x = putStrLn (show x) >> return (strategyBot weight)
+          answer SelectBuys as _
+              | not $ null $ filter isfun as =
+                  return (filter isfun as, weightedBot weight)
+          answer q as m =
+              do (a,_) <- (answerQuestion (weightedBot weight)) q as m
+                 return (a, strategyBot weight)
+          isfun (PickCard c) = cname c `elem` ["Chapel", "Moneylender"]
+          isfun _ = False
 
 weightedBot :: (QuestionMessage -> Answer -> Double) -> PlayerFunctions
 weightedBot weight = ioToPlayer status info answer
@@ -250,6 +271,9 @@ main = getArgs >>= mainArgs []
 mainArgs :: [Card] -> [String] -> IO ()
 mainArgs cs as
     = case as of
+        [name@('s':'t':'r':_),hostname] ->
+             runClientTCP hostname 12345 $ simpleNamedClient name $ ioClient $
+                          client (strategyBot wmoney) name
         [name@('m':'o':'n':_),hostname] ->
              runClientTCP hostname 12345 $ simpleNamedClient name $ ioClient $
                           client (weightedBot wmoney) name
