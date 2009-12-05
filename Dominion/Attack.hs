@@ -37,7 +37,7 @@ react a cs p = do ds <- filter isDurationReaction `fmap` getStack (durations p)
                      d:ds' -> getDurationReaction d p (react a (d:cs) p)
                      [] -> do
                        h <- filter isReaction `fmap` getStack (hand p)
-                       let rs = filter (not . (`elem`cs)) ds
+                       let rs = filter (not . (`elem`cs)) h
                        catchError `flip` (\_ -> return id) $ do
                          [r] <- askCards p rs (SelectReaction a)
                                 (0,1)
