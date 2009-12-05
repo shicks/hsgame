@@ -35,6 +35,7 @@ start ps c cs = do (chi,cho) <- pipe
                                ++ replicate provs province
                                ++ replicate (10*(length ps-1)) curse
                      addCards sup
+                     tellAll $ InfoMessage $ "Supply: "++show cs
                      return ()
     where allPlayers = map PId [0..length ps-1]
           fillDeck p = discard p *<#
