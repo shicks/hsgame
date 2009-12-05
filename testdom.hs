@@ -103,8 +103,8 @@ stdioClient name = client (stateToPlayer status info answer "") name
                    \(n,a) -> liftIO $ putStrLn $ "  " ++ show n ++ ": "
                                                  ++ pretty a
                  ans <- untilJust $ do
-                   liftIO $ putStr $ "Enter " ++ show a0 ++ " to " ++ show a1 ++
-                                     " numbers, separated by spaces: "
+                   liftIO $ putStr $ "Enter " ++ showRange a0 a1
+                              ++ " separated by spaces: "
                    liftIO $ hFlush stdout
                    (ints (length as) . words) `fmap` liftIO getLine
                  return $ map (\n -> as!!(n-1)) ans
@@ -121,6 +121,13 @@ stdioClient name = client (stateToPlayer status info answer "") name
           prefix = unlines["",replicate 40 '=',
                            spaces++name++spaces,
                            replicate 40 '-',""]
+          showRange 0 1 = "up to 1 number"
+          showRange 0 a = "up to " ++ show a ++ " numbers"
+          showRange 1 1 = "1 number"
+          showRange a b | a==b = show a ++ " numbers"
+                        | b==a+1 = show a ++ " or " ++ show b ++ " numbers"
+                        | otherwise = " from " ++ show a ++ " to " ++ show a
+                                      ++ " numbers"
 
 wantBad :: QuestionMessage -> Bool
 wantBad (GiveAway _) = True
