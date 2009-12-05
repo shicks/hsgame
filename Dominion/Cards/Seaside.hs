@@ -212,9 +212,9 @@ pirateShip = Card 0 4 "Pirate Ship" "..." [action $ getSelf >>= a]
                         [c] <- askCards self ts (TrashBecause "pirate") (1,1)
                         discard opp *<< filter (/=c) ts
                         liftIO $ writeIORef succ True
-                      True <- liftIO $ readIORef succ
-                      self <- getSelf
-                      liftIO $ modifyIORef pirateData $ inc self
+                      try $ do True <- liftIO $ readIORef succ
+                               self <- getSelf
+                               liftIO $ modifyIORef pirateData $ inc self
           inc p [] = [(p,1)]
           inc p ((p',x):xs) | p==p' = (p',1+x):xs
                             | otherwise = (p',x):inc p xs
