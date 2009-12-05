@@ -37,7 +37,7 @@ react a cs p = do ds <- filter isDurationReaction `fmap` getStack (durations p)
                      d:ds' -> getDurationReaction d p (react a (d:cs) p)
                      [] -> do
                        h <- filter isReaction `fmap` getStack (hand p)
-                       let rs = filter (not . (`elem`cs)) h
+                       let rs = filter (not . (`elem`cs)) ds
                        catchError `flip` (\_ -> return id) $ do
                          [r] <- askCards p rs (SelectReaction a)
                                 (0,1)
@@ -46,8 +46,7 @@ react a cs p = do ds <- filter isDurationReaction `fmap` getStack (durations p)
                          getReaction r p (react a (r:cs) p)
 
 attackNow :: String -> Attack -> Game ()
-attackNow s a = do att <- attack s
-                   att a
+attackNow s a = attack s >>= ($a)
 
 -- askReaction :: PlayerId -> String -> Game (Attack -> Attack)
 -- askReaction p s = do h <- getStack $ PlayerStack p Hand
