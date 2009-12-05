@@ -211,7 +211,7 @@ steward = Card 0 3 "Steward" "..." [action $ getSelf >>= a]
 swindler :: Card
 swindler = Card 0 3 "Swindler" "..." [action a]
     where a = do plusCoin 2
-                 attackNow "saboteur" $ \self opp -> try $ do
+                 attackNow "swindler" $ \self opp -> try $ do
                    [c] <-1<* deck opp
                    trash << [c]
                    p <- priceM c

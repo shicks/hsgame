@@ -238,7 +238,7 @@ smugglerData = unsafePerformIO $ newIORef []
 -- http://www.boardgamegeek.com/thread/455785/page/2
 -- we add all gains, since provinces can cost 6 later
 smugglers :: Card
-smugglers = Card 0 3 "Action" "..." [Hook (SetupHook setup),action a]
+smugglers = Card 0 3 "Smugglers" "..." [Hook (SetupHook setup),action a]
     where setup _ = modify $ \s -> s { hookGain = gainHook:hookGain s,
                                        hookTurn = turnHook:hookTurn s }
           turnHook :: PId -> Game ()
