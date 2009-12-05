@@ -165,7 +165,7 @@ saboteur = Card 0 5 "Saboteur" "..." [action a]
                                         tell self $ "Trashed "++show c
                                         sup <- supplyCosting (<=(p-2))
                                         gain opp discard *<#
-                                             askCards opp sup (q c) (1,1))
+                                             askCards opp sup (q c) (0,1))
                          $ discard opp *<<< aside
           q c = GiveAway $ "Trashed "++show c++": replacement?"
 
