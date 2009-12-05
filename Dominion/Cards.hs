@@ -54,19 +54,20 @@ blackMarket = Card 0 3 "Black Market" "..." [Hook (SetupHook setup), action a]
                            needed = if cost>coins
                                     then " (need "++show (cost-coins)++" more)"
                                     else ""
-                       ts <- askCards self (filter isTreasure h)
+                           allTreasure = filter isTreasure h
+                       ts <- askCards self allTreasure
                              (OtherQuestion $ "play treasures"++needed)
                              (0,length h)
+                       val <- sum `fmap` mapM getTreasure ts
+                       if val+coins>=cost then do played << ts
+                                                  plusCoin val
+                                          else do played << allTreasure
+                                                  plusCoin treasure
                        -- we might try to make these more atomic...?
-                       plusCoin =<< sum `fmap` mapM getTreasure ts
-                       played << ts
-                       coins' <- withTurn $ gets turnCoins
-                       if cost <= coins'
-                          then do plusCoin (-cost)
-                                  runBuyHooks self [c]
-                                  gain' self discard *<< [c]
-                                  return [c]
-                          else return []
+                       plusCoin (-cost)
+                       runBuyHooks self [c]
+                       gain' self discard *<< [c]
+                       return [c]
                  buy <- catchError f (\_ -> return [])
                  -- allow reordering of submerged cards?
                  bmDeck .<< filter (notIn buy) cs
