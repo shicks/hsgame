@@ -1,0 +1,3 @@
+- security - verify source of messages
+- make stacks aside' for each player, for use in attacks
+  - make use of finally to make sure they end up where they need to go

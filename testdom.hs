@@ -1,5 +1,4 @@
-{-# LANGUAGE PatternGuards #-}
-
+{-# LANGUAGE PatternGuards, FlexibleInstances #-}
 
 import Dominion
 
@@ -15,12 +14,13 @@ import Control.Monad ( forever, when, replicateM, forM_ )
 import Control.Monad.State ( evalStateT, execStateT,
                              StateT, runStateT, put, get, modify, liftIO )
 import Data.Char ( toLower, isSpace )
-import Data.List ( sortBy, (\\) )
+import Data.List ( sortBy, (\\), intercalate )
 import Data.Ord ( comparing )
 import Data.IORef ( newIORef, readIORef, writeIORef )
-import System.IO ( hFlush, stdout )
+import System.IO ( hFlush, hPutStrLn, stdout, stderr )
 import System.Environment ( getArgs )
 import System.Random ( randomRIO )
+import System.Exit ( exitWith, ExitCode(..) )
 
 data PlayerFunctions = PlayerFunctions {
       serverStatus   :: String -> IO PlayerFunctions,
@@ -64,27 +64,47 @@ stateToPlayer ss ri aq s0 = PlayerFunctions
     where this = stateToPlayer ss ri aq
           (***) f g (a,b) = (f a,g b)
 
+class Pretty p where
+    pretty :: p -> String
+
+instance Pretty CardDescription where
+    pretty c = cname c++" ("++show (cprice c)++")" --  ["++ show (cid c)++"]"
+instance Pretty [CardDescription] where
+    pretty cs = intercalate ", " $ map pretty cs
+instance Pretty InfoMessage where
+    pretty (InfoMessage s) | 1==1 = s -- prevent overlapping match warning
+    pretty (GameOver s) = s
+    pretty (CardPlay p cs) = p ++ " played " ++ pretty cs
+    pretty (CardDraw p (Left n)) = p ++ " drew " ++ show n ++ " cards"
+    pretty (CardDraw _ (Right cs)) = "You drew " ++ pretty cs
+    pretty (CardDiscard p cs) = p ++ " discarded " ++ pretty cs
+    pretty (CardTrash p cs) = p ++ " trashed " ++ pretty cs
+    pretty (CardReveal p cs f) = p ++ " revealed " ++ pretty cs ++ " from " ++ f
+    pretty (CardBuy p cs) = p ++ " bought " ++ pretty cs
+    pretty (CardGain p cs) = p ++ " gained " ++ pretty cs
+    pretty (Reshuffled p) = p ++ " reshuffled"
+    pretty s = show s -- prevent crashing when we add message types
+instance Pretty Answer where
+    pretty (Choose s) = s
+    pretty (PickCard c) = pretty c
 
 stdioClient :: String -> Input MessageToClient -> Output ResponseFromClient -> IO ()
 stdioClient name = client (stateToPlayer status info answer "") name
-    where status = liftIO . putStrLn
-          info m = case m of
-                     InfoMessage s -> modify (++(s++"\n"))
-                     --
+    where status _ = return () -- status = liftIO . hPutStrLn stderr
+          info (GameOver m) = liftIO $ putStrLn m >> exitWith ExitSuccess
+          info m = modify (++(pretty m++"\n"))
           answer :: QuestionMessage -> [Answer] -> (Int,Int) -> StateT String IO [Answer]
           answer m as (a0,a1) =
               do get >>= liftIO . putStrLn
                  put ""
                  liftIO $ putStrLn $ "Question: " ++ show m
                  liftIO $ putStrLn "Options:"
-                 let pretty (Choose s) = s
-                     pretty (PickCard c) = cname c++" ("++show (cprice c)++") ["++
-                                           show (cid c)++"]"
                  forM_ (zip [1..] as) $
-                   \(n,a) -> liftIO $ putStrLn $ "  " ++ show n ++ ": " ++ pretty a
+                   \(n,a) -> liftIO $ putStrLn $ "  " ++ show n ++ ": "
+                                                 ++ pretty a
                  ans <- untilJust $ do
-                   liftIO $ putStr $ "Enter " ++ show a0 ++ " to " ++ show a1 ++
-                                     " numbers, separated by spaces: "
+                   liftIO $ putStr $ "Enter " ++ showRange a0 a1
+                              ++ " separated by spaces: "
                    liftIO $ hFlush stdout
                    (ints (length as) . words) `fmap` liftIO getLine
                  return $ map (\n -> as!!(n-1)) ans
@@ -101,6 +121,13 @@ stdioClient name = client (stateToPlayer status info answer "") name
           prefix = unlines["",replicate 40 '=',
                            spaces++name++spaces,
                            replicate 40 '-',""]
+          showRange 0 1 = "up to 1 number"
+          showRange 0 a = "up to " ++ show a ++ " numbers"
+          showRange 1 1 = "1 number"
+          showRange a b | a==b = show a ++ " numbers"
+                        | b==a+1 = show a ++ " or " ++ show b ++ " numbers"
+                        | otherwise = " from " ++ show a ++ " to " ++ show a
+                                      ++ " numbers"
 
 wantBad :: QuestionMessage -> Bool
 wantBad (GiveAway _) = True
@@ -149,6 +176,13 @@ weights q (PickCard c)
 weights _ _ = 1
 
 wmoney :: QuestionMessage -> Answer -> Double
+wmoney SelectAction (PickCard c) | cname c == "Chapel" = 1000
+                                 | cname c == "Moneylender" = 1000
+                                 | cname c == "Village" = 10000
+                                 | cname c == "Market" = 10000
+                                 | cname c == "Pearl Diver" = 10000
+                                 | cname c == "Great Hall" = 10000
+                                 | cname c == "Smithy" = 100
 wmoney q (PickCard c)
     | wantBad q && cname c == "Curse" = 1000
     | wantBad q && cname c == "Estate" = 20
@@ -170,9 +204,24 @@ wmoney q (PickCard c)
     | cname c == "Duchy" = 0.1
 wmoney _ _ = 0
 
+strategyBot :: (QuestionMessage -> Answer -> Double) -> PlayerFunctions
+strategyBot weight = PlayerFunctions status info answer
+    where status x = putStrLn x >> return (strategyBot weight)
+          info (GameOver m) = putStrLn m >> exitWith ExitSuccess
+          info x = putStrLn (show x) >> return (strategyBot weight)
+          answer SelectBuys as _
+              | not $ null $ filter isfun as =
+                  return (filter isfun as, weightedBot weight)
+          answer q as m =
+              do (a,_) <- (answerQuestion (weightedBot weight)) q as m
+                 return (a, strategyBot weight)
+          isfun (PickCard c) = cname c `elem` ["Chapel", "Moneylender"]
+          isfun _ = False
+
 weightedBot :: (QuestionMessage -> Answer -> Double) -> PlayerFunctions
 weightedBot weight = ioToPlayer status info answer
     where status _ = return ()
+          info (GameOver m) = liftIO $ putStrLn m >> exitWith ExitSuccess
           info _   = return ()
           pick wtot was = seek was `fmap` randomRIO (0,wtot)
           seek [(_,a)] _ = a
@@ -196,7 +245,8 @@ weightedBot weight = ioToPlayer status info answer
 randomBot :: PlayerFunctions
 randomBot = ioToPlayer status info answer
     where status _ = return ()
-          info _   = return ()
+          info (GameOver m) = liftIO $ putStrLn m >> exitWith ExitSuccess
+          info _ = return ()
           answer _ as (a,b) = liftIO $ do n <- randomRIO (a,b)
                                           take n `fmap` shuffleIO as
 
@@ -228,6 +278,9 @@ main = getArgs >>= mainArgs []
 mainArgs :: [Card] -> [String] -> IO ()
 mainArgs cs as
     = case as of
+        [name@('s':'t':'r':_),hostname] ->
+             runClientTCP hostname 12345 $ simpleNamedClient name $ ioClient $
+                          client (strategyBot wmoney) name
         [name@('m':'o':'n':_),hostname] ->
              runClientTCP hostname 12345 $ simpleNamedClient name $ ioClient $
                           client (weightedBot wmoney) name

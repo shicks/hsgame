@@ -5,25 +5,29 @@ module Dominion.Stack ( OStack, UStack, IStack, printStack,
                         (*<<), (.<<), (<<), (*<#), (.<#), (<#),
                         (<*), (<.), (*<<<), (.<<<), (<<<), (#<), (#<#),
                         stackName, getStack, top, bottom,
-                        shuffle, shuffleIO,
+                        shuffle, shuffleIO, supply,
                         draw, hand, deck, discard, mat, trash,
                         durations, played, prevDuration, aside,
-                        allSupply, supplyCards, allCards,
-                        defaultGain, gain, cardWhere ) where
+                        allSupply, supplyCards, inSupply, inTrash,
+                        allCards,
+                        gain, gain', gainSilent,
+                        revealHand, revealCards,
+                        cardWhere ) where
 
 import Dominion.Types
-import Dominion.Question
+import Dominion.Message
 
 import Prelude hiding ( mod )
 
-import Control.Monad ( (>=>) )
+import Control.Monad ( (>=>), forM, forM_, when, filterM )
 import Control.Monad.State ( gets, modify )
 import Control.Monad.Trans ( liftIO )
 import System.Random ( randomRIO )
 import Data.Array ( Ix, Array, elems, listArray, bounds, (//), (!) )
-import Data.List ( sortBy )
+import Data.List ( sortBy, groupBy )
 import Data.Maybe ( listToMaybe )
 import Data.Ord ( comparing )
+import Data.Function ( on )
 
 addCards :: [Card] -> Game [Card]
 addCards cs = do cur <- gets gameCards
@@ -45,7 +49,6 @@ printStack s x = do cs <- getStack x
                     liftIO $ putStrLn s
                     liftIO $ mapM_ (\c -> putStrLn $ "  " ++ pretty c) cs
                     liftIO $ putStrLn "#"
-                    
 
 data OStack = OStack { -- ordered stack
       oAddToTop     :: [Card] -> Game (),  -- top is low
@@ -95,6 +98,8 @@ unorderedStack sn = UStack { uAddToStack = add, uGetStack = gs,
                           then [(x,c)]
                           else []
 
+class InputStack s where
+    modifyInput :: ([Card] -> Game [Card]) -> s -> s
 class NamedStack s where
     stackName :: s -> StackName
 class OrderedInputStack s where
@@ -116,25 +121,30 @@ instance OutputStack OStack where
     unorderedGetStack = oGetStack
 instance NamedStack OStack where
     stackName = oStackName
+instance InputStack OStack where
+    modifyInput f (OStack att atb gs sn) = OStack (f>=>att) (f>=>atb) gs sn
+
 instance UnorderedInputStack UStack where
     addToStack = uAddToStack
 instance OutputStack UStack where
     unorderedGetStack = uGetStack
 instance NamedStack UStack where
     stackName = uStackName
+instance InputStack UStack where
+    modifyInput f (UStack add gs sn) = UStack (f>=>add) gs sn
 
 get :: OutputStack s => Int -> s -> Game [Card]
 get = flip unorderedGetStack
 
 data IStack s = IStack {
-      inputProc :: [Card] -> Game (),
+      inputProc :: [Card] -> Game [Card],
       origStack :: s
 }
 instance OrderedInputStack s => OrderedInputStack (IStack s) where
-    addToBottom s cs = inputProc s cs >> addToBottom (origStack s) cs
-    addToTop s cs = inputProc s cs >> addToTop (origStack s) cs
+    addToBottom s cs = inputProc s cs >>= addToBottom (origStack s)
+    addToTop s cs = inputProc s cs >>= addToTop (origStack s)
 instance UnorderedInputStack s => UnorderedInputStack (IStack s) where
-    addToStack s cs = inputProc s cs >> addToStack (origStack s) cs
+    addToStack s cs = inputProc s cs >>= addToStack (origStack s)
 
 -- mod :: Stack -> ([Card] -> [Card]) -> Game ()
 -- mod = modifyStack
@@ -203,9 +213,11 @@ infix 1 .<<<, *<<<, <<<
 (<<<) to from = get 0 from >>= (to<<)
 
 draw :: Int -> PId -> Game ()
-draw n p = do hand p <#n<* deck p
-              h <- get 0 $ hand p -- put these in the stack modifiers now...
-              tell p $ "Drew cards: hand="++show (h::[Card]) -- improve...
+draw n p = do cs <-n<* deck p
+              hand p << cs
+              name <- withPlayer p $ gets playerName
+              tellP p $ CardDraw name $ Right $ map describeCard cs
+              tellOppOf p $ CardDraw name $ Left $ length cs
 
 hand :: PId -> UStack
 hand p = unorderedStack (SPId p "hand")
@@ -220,10 +232,21 @@ deck p = OStack att atb gs sn
                        else do d <- get 0 $ discard p
                                d' <- shuffle d
                                atb d'
+                               name <- withPlayer p $ gets playerName
+                               tellAll $ Reshuffled name
                                return $ x++d'
 
 discard :: PId -> OStack
-discard p = orderedStack $ SPId p "discard"
+discard p = modifyInput (thread f) $ orderedStack $ SPId p "discard"
+    where f cs = do cs' <- filterM from cs
+                    name <- withPlayer p $ gets playerName
+                    when (not $ null cs') $
+                         tellAll $ CardDiscard name $ map describeCard cs'
+          from c = do loc <- cardWhere c
+                      case loc of
+                        SN "aside" -> return True
+                        SPId _ "hand" -> return True
+                        _ -> return False
 
 mat :: String -> PId -> OStack
 mat n p = orderedStack $ SPId p $ "stack-"++n
@@ -232,7 +255,9 @@ durations :: PId -> UStack
 durations p = unorderedStack $ SPId p "durations"
 
 played :: UStack
-played = unorderedStack $ SN "turnPlayed"
+played = modifyInput (thread f) $ unorderedStack $ SN "played"
+    where f cs = do n <- getSelf >>= withPlayer `flip` gets playerName
+                    tellAll $ CardPlay n $ map describeCard cs
 
 prevDuration :: UStack
 prevDuration = unorderedStack $ SN "prev-duration"
@@ -241,29 +266,72 @@ aside :: UStack
 aside = unorderedStack $ SN "aside"
 
 trash :: UStack
-trash = unorderedStack $ SN "trash"
+trash = modifyInput (thread f) $ unorderedStack $ SN "trash"
+    -- this is complicated because we need to figure out who OWNED the
+    -- card before, and we'd like to group it into a single message,
+    -- if possible, for each owner.
+    where f cs = do cs' <- forM cs $ \c -> do
+                             loc <- cardWhere c
+                             owner <- case loc of
+                                        SPId p _ -> withPlayer p $
+                                                    gets playerName
+                                        SN "played" -> do p <- getSelf
+                                                          withPlayer p $
+                                                            gets playerName
+                                        _ -> return "Somebody"
+                             return (owner,c)
+                    let srt = groupBy ((==) `on` fst) $
+                              sortBy (comparing fst) cs'
+                    forM_ srt $ \ss -> do let p = fst $ head ss
+                                              ss' = map (describeCard.snd) ss
+                                          tellAll $ CardTrash p ss'
 
-allSupply :: Game [Card]
+supply :: UStack -- messages?
+supply = unorderedStack $ SN "supply"
+
+allSupply :: Game [Card] -- rewrite in terms of supply?
 allSupply = (concatMap iss . elems) `fmap` gets gameCards
     where iss (SN "supply",_,c) = [c]
           iss _ = []
 
-supplyCards :: String -> Game [Card]
-supplyCards n = filter ((==n) . cardName) `fmap` allSupply
+supplyCards :: Card -> Game [Card]
+supplyCards c = filter (sameName c) `fmap` allSupply
 
-defaultGain :: PId -> Card -> Game ()
-defaultGain p c0 =
-    do cs <- supplyCards (cardName c0)
-       case cs of [] -> fail "cannot gain card with empty supply"
-                  _  -> discard p *<< take 1 cs
+inSupply :: Card -> Game Bool
+inSupply c = (not . null) `fmap` supplyCards c
 
-gain :: PId -> (PId -> s) -> IStack s -- would map hookGain instead
-gain p s = IStack (mapM_ (defaultGain p)) (s p)
+inTrash :: Card -> Game Bool
+inTrash c = do loc <- cardWhere c
+               return $ loc == stackName trash
 
--- gain :: PId -> Card -> Game ()
--- gain p c = join $ (($c) . ($p)) `fmap` gets hookGain
--- gain :: PId -> Card -> Game ()
--- gain = defaultGain
+-- *this is a funny distinction.  @gain@ will be used only for
+-- gaining cards from the supply, while @gain'@ will be used for
+-- gaining a particular instance of a card.  If a card is not
+-- in the supply then @gain@ will fail.  'hookGain' is run in
+-- both cases.  Note that failure means that smugglers must either
+-- use 'try' or else filter out unavailable cards.
+gain :: PId -> (PId -> s) -> IStack s
+gain p s = IStack gain'' (s p)
+    where gain'' cs = do cs' <- concat `fmap` mapM checkSupply cs
+                         runGainHooks p cs'
+                         name <- withPlayer p $ gets playerName
+                         when (not $ null cs') $
+                              tellAll $ CardGain name $ map describeCard cs'
+                         return cs'
+          checkSupply c = take 1 `fmap` supplyCards c
+
+gain' :: PId -> (PId -> s) -> IStack s
+gain' p s = IStack (thread gain'') (s p)
+    where gain'' cs = do runGainHooks p cs
+                         name <- withPlayer p $ gets playerName
+                         when (not $ null cs) $
+                              tellAll $ CardGain name $ map describeCard cs
+
+-- no announcement because we already announced Buy...
+gainSilent :: PId -> (PId -> s) -> IStack s
+gainSilent p s = IStack gain'' (s p)
+    where gain'' cs = mapM checkSupply cs >>= thread (runGainHooks p) . concat
+          checkSupply c = take 1 `fmap` supplyCards c
 
 allCards :: PId -> Game [Card]
 allCards p = (concatMap isp . elems) `fmap` gets gameCards
@@ -275,3 +343,16 @@ cardWhere :: Card -> Game StackName
 cardWhere c = do cs <- gets gameCards
                  let (s,_,_) = cs ! cardId c
                  return s
+
+thread :: Monad m => (a -> m b) -> a -> m a
+thread f a = f a >> return a
+
+
+revealHand :: PId -> Game ()
+revealHand p = do h <- getStack $ hand p
+                  name <- withPlayer p $ gets playerName
+                  tellAll $ CardReveal name (map describeCard h) "hand"
+
+revealCards :: PId -> [Card] -> String -> Game ()
+revealCards p cs f = do name <- withPlayer p $ gets playerName
+                        tellAll $ CardReveal name (map describeCard cs) f

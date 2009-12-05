@@ -1,15 +1,12 @@
 module Dominion.Question where
 
 import Dominion.Types
+import Dominion.Stack
 
 import TCP.Chan ( writeOutput )
 import Control.Concurrent.MVar ( newEmptyMVar, takeMVar, putMVar )
 import Control.Monad.State ( gets, liftIO )
 import Data.Maybe ( catMaybes, fromJust )
-
-tell :: PId -> String -> Game ()
-tell p s = do och <- withPlayer p $ gets playerChan
-              liftIO $ writeOutput och $ Info $ InfoMessage s
 
 -- *simple question with list of answers: choose 1
 ask1 :: PId -> [Answer] -> QuestionMessage -> Game Answer
@@ -67,9 +64,16 @@ askMC2 p ss s = do (a,a') <- ask2 p (map (Choose . fst) ss) $
 askCards :: PId -> [Card] -> QuestionMessage -> (Int,Int) -> Game [Card]
 askCards = askCardsRepl $ \c -> filter (/= c)
 
+-- *refinement of above, defaulting to own hand
+askCardsHand :: QuestionMessage -> (Int,Int) -> Game [Card]
+askCardsHand q r = do self <- getSelf
+                      h <- getStack $ hand self
+                      askCards self h q r
+
 askCards' :: PId -> [Card] -> QuestionMessage -> (Int,Int) -> Game [Card]
 askCards' = askCardsRepl (const id)
 
+-- negative number for max means no maximum
 askCardsRepl :: (Card -> [Card] -> [Card]) -- filter out card from list
              -> PId -> [Card] -> QuestionMessage -> (Int,Int) -> Game [Card]
 askCardsRepl _ _ [] _ _ = return [] -- no cards -> no cards
@@ -92,7 +96,7 @@ askCardsRepl filt p cs q (mn,mx) =
          go
          takeMVar mv
     where realMin = min mn $ length cs
-          realMax = min mx $ length cs
+          realMax = if mx<0 || mx>length cs then length cs else mx
           test [] _ = True -- as is subset of cs (unordered)
           test (PickCard cd:as) cs =
               case lookupCard cd cs of
