@@ -6,7 +6,7 @@ main = build [] $ do -- autoVersion Numbered
                      checkOnce "if we accept PostfixOperators" $
                                do ghcFlags ["-XPostfixOperators"]
                                   requireModule "Data.List"
-                     ghcFlags ["-threaded", -- "-Wall",
+                     ghcFlags ["-threaded", "-Wall", "-Werror",
                                "-funbox-strict-fields","-O2"]
                      executable "yell" "yell.hs" []
                      executable "echo" "echo.hs" []

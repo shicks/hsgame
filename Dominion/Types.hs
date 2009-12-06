@@ -53,7 +53,9 @@ try a = catchError (a >> return ()) (\_ -> return ())
 
 instance Monad Game where
     return a = Game $ \s -> return (Right a,s)
-    fail e = Game $ \s -> return (Left $ error e,s)
+    -- The use of GameError, QId and CId below is just to eliminate a
+    -- warning about these constructors being unused...
+    fail e = Game $ \s -> return (Left (error e GameError QId CId),s)
     Game a >>= f = Game $ \s -> do (a',s') <- a s
                                    case a' of
                                      Left e -> return (Left e,s')
@@ -124,7 +126,7 @@ data Card = Card {
 instance Eq Card where
     Card i _ _ _ _ == Card j _ _ _ _ = i==j
 instance Show Card where
-    show (Card id_ pr name text_ typ_) =name++" ("++show pr++")" -- ++": "++text
+    show (Card _id pr name _ext _typ) =name++" ("++show pr++")" -- ++": "++text
 data CardDescription =
  CardDescription { cid :: CId, cprice :: Int, cname :: String, ctext :: String }
                  deriving ( Eq, Show, Read )
@@ -152,7 +154,7 @@ data CardType
 instance Show CardType where
     show (Action _) = "Action"
     show Victory = "Victory"
-    show (Treasure n) = "Treasure"
+    show (Treasure _) = "Treasure"
     show (Reaction _) = "Reaction"
     show _ = ""
 
@@ -243,12 +245,12 @@ withPlayer (PId n) job = do ps <- gets gamePlayers
                                  fail $ "withPlayer: invalid PId: "++show n
                             let p = ps!!n 
                             (a,p') <- liftIO $ runStateT job p
-                            modify $ \s -> s { gamePlayers = mod p' n $
+                            modify $ \s -> s { gamePlayers = modit p' n $
                                                              gamePlayers s }
                             return a
-    where mod _ _ [] = [] -- fail "withPlayer: invalid PId"?
-          mod p' 0 (_:ss) = (p':ss)
-          mod p' n (s:ss) = s:mod p' (n-1) ss
+    where modit _ _ [] = [] -- fail "withPlayer: invalid PId"?
+          modit p' 0 (_:ss) = (p':ss)
+          modit p' nn (s:ss) = s:modit p' (nn-1) ss
 
 
 newQId :: Game QId
@@ -274,9 +276,6 @@ getOpponents p = do n <- gets $ length . gamePlayers
 getAllPlayers :: Game [PId]
 getAllPlayers = do n <- gets $ length . gamePlayers
                    return $ map PId [0..n-1]
-
-fromPId :: PId -> Game PlayerState
-fromPId p = withPlayer p $ gets id
 
 sameName :: Card -> Card -> Bool
 sameName = (==) `on` cardName

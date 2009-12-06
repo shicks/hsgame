@@ -34,7 +34,7 @@ attack name = do self <- getSelf
 react :: String -> [Card] -> PId -> Game (Attack -> Attack)
 react a cs p = do ds <- filter isDurationReaction `fmap` getStack (durations p)
                   case filter (not . (`elem`cs)) ds of
-                     d:ds' -> getDurationReaction d p (react a (d:cs) p)
+                     d:_ -> getDurationReaction d p (react a (d:cs) p)
                      [] -> do
                        h <- filter isReaction `fmap` getStack (hand p)
                        let rs = filter (not . (`elem`cs)) h

@@ -7,7 +7,6 @@ import Dominion.Question
 import Dominion.Message
 import Dominion.Cards.Helpers
 import Dominion.Cards.Base
-import Dominion.Cards.Intrigue
 
 import Control.Monad.State ( gets, modify, liftIO )
 import Control.Monad ( (<=<), when, unless, forM_, filterM )
@@ -179,8 +178,7 @@ navigator = Card 0 4 "Navigator" "..." [action a]
 
 outpost :: Card
 outpost = Card 0 5 "Outpost" "..." [duration a]
-    where a = do self <- getSelf
-                 cur <- getStack prevDuration
+    where a = do cur <- getStack prevDuration
                  unless (any (sameName outpost) cur) $
                    withTurn $ modify $ \s -> s { nextTurnHook = \_->plusCard 3 }
 
@@ -204,15 +202,15 @@ pirateShip = Card 0 4 "Pirate Ship" "..." [action $ getSelf >>= a]
                       askMC self `flip` "Choose one" $
                             [("+"++show loot++" Coins",plusCoin loot),
                              ("Loot opponents",go att)]
-          go att = do succ <- liftIO $ newIORef False
+          go att = do suc <- liftIO $ newIORef False
                       att $ \self opp -> try $ do
                         cs <-2<* deck opp
                         let (ts,nts) = partition isTreasure cs
                         discard opp *<< nts
                         [c] <- askCards self ts (TrashBecause "pirate") (1,1)
                         discard opp *<< filter (/=c) ts
-                        liftIO $ writeIORef succ True
-                      try $ do True <- liftIO $ readIORef succ
+                        liftIO $ writeIORef suc True
+                      try $ do True <- liftIO $ readIORef suc
                                self <- getSelf
                                liftIO $ modifyIORef pirateData $ inc self
           inc p [] = [(p,1)]
@@ -245,7 +243,7 @@ smugglers = Card 0 3 "Smugglers" "..." [Hook (SetupHook setup),action a]
           turnHook p = liftIO $ modifyIORef smugglerData $ clear p
           gainHook :: PId -> [Card] -> Game ()
           gainHook p cs = liftIO $ modifyIORef smugglerData $ add p cs
-          clear p [] = []
+          clear _ [] = []
           clear p ((p',cs):xs) | p==p' = xs
                                | otherwise = (p',cs):clear p xs
           add p c [] = [(p,c)]
@@ -272,7 +270,10 @@ treasureMap = Card 0 4 "Treasure Map" "..." [Action a]
                                                   "treasure map") (1,1)
                         t <- inTrash this
                         when (not (null cs) && not t) $
-                             gain self deck *<< replicate 4 gold
+                             do gain self deck *<< [gold]
+                                gain self deck *<< [gold]
+                                gain self deck *<< [gold]
+                                gain self deck *<< [gold]
                         trash << this:cs -- everything gets trashed
 
 {-# NOINLINE treasuryData #-}
