@@ -12,7 +12,6 @@ import Dominion.Cards.Helpers
 
 import Dominion.Types
 import Dominion.Stack
-import Dominion.Attack
 import Dominion.Question
 import Dominion.Message
 

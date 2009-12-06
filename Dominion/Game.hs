@@ -8,8 +8,8 @@ import Dominion.Stack
 
 import Control.Concurrent ( forkIO )
 import TCP.Chan ( Output, Input, pipe, readInput, writeOutput )
-import Control.Monad.State ( execStateT, modify, gets, liftIO )
-import Control.Monad ( replicateM, foldM, when, forever, liftM2 )
+import Control.Monad.State ( modify, gets, liftIO )
+import Control.Monad ( foldM, when, forever, liftM2 )
 import Data.Array ( array )
 
 newTurn :: TurnState
@@ -40,7 +40,7 @@ start ps c cs = do (chi,cho) <- pipe
     where allPlayers = map PId [0..length ps-1]
           fillDeck p = discard p *<#
                        addCards (replicate 3 estate ++ replicate 7 copper)
-          emptyPlayer (i,(s,c)) = PlayerState i s c []
+          emptyPlayer (i,(s,card)) = PlayerState i s card []
           emptyState chi cho =
               GameState (map emptyPlayer $ zip [0..] ps) (array (0,-1) [])
                             0 newTurn [] [] [] chi cho [0..]
@@ -54,8 +54,8 @@ start ps c cs = do (chi,cho) <- pipe
                                   let rs' = if u then remove q rs else rs
                                   respond ch rs'
                                RegisterQuestion q f -> respond ch $ (q,f):rs
-          remove q [] = []
-          remove q ((q',f):xs) | q==q' = xs
+          remove _ [] = []
+          remove q ((q',_):xs) | q==q' = xs
           remove q (x:xs) = x:remove q xs
 
 
@@ -83,7 +83,6 @@ play = do winner <- endGame
           playerScore p = do cs <- allCards p
                              foldM (flip ($)) 0 $
                                    concatMap (getScores . cardType) cs
-          isProvince = (=="Province") . cardName
           getScores [] = []
           getScores (Score f:xs) = f:getScores xs
           getScores (_:xs) = getScores xs
@@ -92,7 +91,7 @@ turn :: Game ()
 turn = do self <- gets currentTurn
           runTurnHooks self
           modify $ \s -> s { turnState = newTurn }
-          duration self
+          runDuration self
           actions self
           -- tell self . ("Supply: "++) . show =<< allSupply
           buy self
@@ -130,11 +129,10 @@ turn = do self <- gets currentTurn
                                                       tellAll $ CardBuy name $
                                                          map describeCard cs
                                          else attemptBuy self buys money
-          duration self = do prevDuration <<< durations self
-                             withPlayer self (gets durationEffects)
-                                            >>= sequence_
-                             withPlayer self (modify $
-                                            \s -> s { durationEffects = [] })
+          runDuration self =
+              do prevDuration <<< durations self
+                 withPlayer self (gets durationEffects) >>= sequence_
+                 withPlayer self (modify $ \s -> s { durationEffects = [] })
           cleanup self = do sequence =<< withTurn (gets cleanupHooks)
                             discard self *<<< played
                             discard self *<<< prevDuration

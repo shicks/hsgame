@@ -17,15 +17,12 @@ module Dominion.Stack ( OStack, UStack, IStack, printStack,
 import Dominion.Types
 import Dominion.Message
 
-import Prelude hiding ( mod )
-
 import Control.Monad ( (>=>), forM, forM_, when, filterM )
 import Control.Monad.State ( gets, modify )
 import Control.Monad.Trans ( liftIO )
 import System.Random ( randomRIO )
-import Data.Array ( Ix, Array, elems, listArray, bounds, (//), (!) )
+import Data.Array ( elems, listArray, bounds, (//), (!) )
 import Data.List ( sortBy, groupBy )
-import Data.Maybe ( listToMaybe )
 import Data.Ord ( comparing )
 import Data.Function ( on )
 
@@ -146,9 +143,6 @@ instance OrderedInputStack s => OrderedInputStack (IStack s) where
 instance UnorderedInputStack s => UnorderedInputStack (IStack s) where
     addToStack s cs = inputProc s cs >>= addToStack (origStack s)
 
--- mod :: Stack -> ([Card] -> [Card]) -> Game ()
--- mod = modifyStack
-
 -- fromTop :: Stack -> Game Card
 -- toTop :: Stack -> Card -> Game ()
 -- fromBottom :: Stack -> Game Card
@@ -162,8 +156,8 @@ shuffleIO []  = return []
 shuffleIO as = do i <- randomRIO (0,length as-1)
                   ((as!!i):) `fmap` shuffleIO (as!-i)
     where [] !- _ = []
-          (a:as) !- 0 = as
-          (a:as) !- n = a:(as!-(n-1))
+          (_:xs) !- 0 = xs
+          (x:xs) !- n = x:(xs!-(n-1))
 
 getStack :: OutputStack s => s -> Game [Card]
 getStack = get 0

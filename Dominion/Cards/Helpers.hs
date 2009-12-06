@@ -2,9 +2,7 @@ module Dominion.Cards.Helpers where
 
 import Dominion.Types
 import Dominion.Stack
-import Dominion.Attack
 import Dominion.Question
-import Dominion.Message
 
 import Control.Monad.State ( gets, modify )
 import Control.Monad ( when )
@@ -68,14 +66,13 @@ action :: Game () -> CardType
 action act = Action $ \_ _ -> act
 
 duration :: Game () -> CardType
-duration act = Action $ \this pred -> do self <- getSelf
-                                         let save = this:maybeToList pred
-                                         durations self << save
-                                         act
+duration act = Action $ \this pre -> do self <- getSelf
+                                        let save = this:maybeToList pre
+                                        durations self << save
+                                        act
 
 oneShot :: Game () -> CardType
-oneShot act = Action $ \this _ -> do self <- getSelf
-                                     trash << [this]
+oneShot act = Action $ \this _ -> do trash << [this]
                                      act
 
 
@@ -98,8 +95,8 @@ getAction :: Card -> Game ()
 getAction c = mapM_ id [a c Nothing | Action a <- cardType c]
 
 getActionPred :: Card -> Card -> Game ()
-getActionPred pred c = foldl (>>) (return ())
-                       [a c (Just pred) | Action a <- cardType c]
+getActionPred pre c = foldl (>>) (return ())
+                      [a c (Just pre) | Action a <- cardType c]
 
 finally :: Game () -> Game () -> Game ()
 finally job after = try job >> after

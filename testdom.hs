@@ -10,14 +10,13 @@ import NamePicker ( simpleNamedClient, pickNames )
 
 import Control.Concurrent ( forkIO )
 import TCP.Chan ( Input, Output, readInput, writeOutput, pipe )
-import Control.Monad ( forever, when, replicateM, forM_ )
-import Control.Monad.State ( evalStateT, execStateT,
+import Control.Monad ( forever, replicateM, forM_ )
+import Control.Monad.State ( execStateT,
                              StateT, runStateT, put, get, modify, liftIO )
 import Data.Char ( toLower, isSpace )
-import Data.List ( sortBy, (\\), intercalate )
+import Data.List ( sortBy, intercalate )
 import Data.Ord ( comparing )
-import Data.IORef ( newIORef, readIORef, writeIORef )
-import System.IO ( hFlush, hPutStrLn, stdout, stderr )
+import System.IO ( hFlush, stdout )
 import System.Environment ( getArgs )
 import System.Random ( randomRIO )
 import System.Exit ( exitWith, ExitCode(..) )
@@ -31,7 +30,7 @@ data PlayerFunctions = PlayerFunctions {
 
 client :: PlayerFunctions -> String
        -> Input MessageToClient -> Output ResponseFromClient -> IO ()
-client p n inc outc = handle p
+client p _ inc outc = handle p
     where handle p0 =
               do p1 <- serverStatus p0 "waiting on input from server..."
                  q <- readInput inc
@@ -108,8 +107,7 @@ stdioClient name = client (stateToPlayer status info answer "") name
                    liftIO $ hFlush stdout
                    (ints (length as) . words) `fmap` liftIO getLine
                  return $ map (\n -> as!!(n-1)) ans
-          spaces = replicate ((40-length name)`div`2) ' '
-          ints n [] = Just []
+          ints _ [] = Just []
           ints n (s:ss) = case readsPrec 0 s of
                             [(x,"")] | x <= n && x > 0 -> (x:) `fmap` ints n ss
                                      | otherwise -> Nothing
@@ -118,9 +116,6 @@ stdioClient name = client (stateToPlayer status info answer "") name
                              case ma of
                                Just a -> return a
                                Nothing -> untilJust job
-          prefix = unlines["",replicate 40 '=',
-                           spaces++name++spaces,
-                           replicate 40 '-',""]
           showRange 0 1 = "up to 1 number"
           showRange 0 a = "up to " ++ show a ++ " numbers"
           showRange 1 1 = "1 number"
@@ -227,6 +222,7 @@ weightedBot weight = ioToPlayer status info answer
           seek [(_,a)] _ = a
           seek ((w,a):was) p | p <= w = a
                              | otherwise = seek was (p-w)
+          seek [] _ = error "seek in weightedBot called with empty list"
           answer _ _ (0,0) = return []
           answer q as (a,b) =
               liftIO $ do let ws = zipWith weight (repeat q) as
@@ -238,8 +234,6 @@ weightedBot weight = ioToPlayer status info answer
                           putStrLn "Chose:"
                           mapM_ (\aa -> putStrLn (show q++" "++pretty aa)) x
                           return x
-          pretty (Choose s) = s
-          pretty (PickCard c) = cname c++" ("++show (cprice c)++")"
 
 
 randomBot :: PlayerFunctions
@@ -302,9 +296,9 @@ mainArgs cs as
         _ -> twoPlayer cs
     where lc = filter (not . isSpace) . map toLower
           lookupBy :: (a -> String) -> String -> [a] -> Maybe a
-          lookupBy f s [] = Nothing
-          lookupBy f s (a:as) | lc (f a) == lc s = Just a
-                              | otherwise        = lookupBy f s as
+          lookupBy _ _ [] = Nothing
+          lookupBy f s (x:xs) | lc (f x) == lc s = Just x
+                              | otherwise        = lookupBy f s xs
 
 pickDecks :: [Card] -> IO [Card]
 pickDecks cs = do let sets = filter ((==10).length.snd) allRecommended

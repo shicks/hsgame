@@ -24,7 +24,7 @@ tellOpp m = getSelf >>= flip tellOppOf m
 
 tellOppOf :: PId -> InfoMessage -> Game ()
 tellOppOf p m = getOpponents p >>= mapM_ send
-    where send p = do och <- withPlayer p $ gets playerChan
+    where send o = do och <- withPlayer o $ gets playerChan
                       liftIO $ writeOutput och $ Info m
 
 tellSelf :: InfoMessage -> Game ()

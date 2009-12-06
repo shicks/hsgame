@@ -54,7 +54,7 @@ adventurer = Card 0 6 "Adventurer" "..." [action $ getSelf >>= a ]
 
 bureaucrat :: Card
 bureaucrat = Card 0 4 "Bureaucrat" "..." [action a]
-    where a = do attackNow "bureaucrat" $ \self opp -> try $ do
+    where a = do attackNow "bureaucrat" $ \_ opp -> try $ do
                    h <- getStack $ hand opp
                    let vs = filter isVictory h
                    if null vs then revealHand opp else do -- reveal hand...?
@@ -170,15 +170,15 @@ spy :: Card
 spy = Card 0 4 "Spy" "..." [action a]
     where a = do self <- getSelf
                  plusAction 1 >> plusCard 1
-                 spy (\_ -> "Self") self self
-                 attackNow "spy" $ spy ("Opponent "++)
-          spy fmt self p = try $ do
-                               [c] <-1<* deck p
-                               who <- withPlayer p $ fmt `fmap` gets playerName
-                               let msg = "("++who++"): Discard "++show c++"?"
-                                   choices = [("Discard",discard p *<< [c]),
-                                              ("Keep",return ())]
-                               askMC self choices msg
+                 dospy (\_ -> "Self") self self
+                 attackNow "spy" $ dospy ("Opponent "++)
+          dospy fmt self p =
+              try $ do [c] <-1<* deck p
+                       who <- withPlayer p $ fmt `fmap` gets playerName
+                       let msg = "("++who++"): Discard "++show c++"?"
+                           choices = [("Discard",discard p *<< [c]),
+                                      ("Keep",return ())]
+                       askMC self choices msg
 
 thief :: Card
 thief = Card 0 4 "Thief" "..." [action a]
@@ -202,12 +202,12 @@ thief = Card 0 4 "Thief" "..." [action a]
 
 throneRoom :: Card
 throneRoom = Card 0 4 "Throne Room" "..." [Action a]
-    where a this pred = try $ do (self,h,_) <- getSHP
-                                 let as = filter isAction h
-                                 [c] <- askCards self as SelectAction (1,1)
-                                 played << [c]
-                                 getAction c
-                                 getActionPred (fromMaybe this pred) c
+    where a this pre = try $ do (self,h,_) <- getSHP
+                                let as = filter isAction h
+                                [c] <- askCards self as SelectAction (1,1)
+                                played << [c]
+                                getAction c
+                                getActionPred (fromMaybe this pre) c
 
 village :: Card
 village = Card 0 3 "Village" "..." $ [action $ plusABCD 2 0 0 1]

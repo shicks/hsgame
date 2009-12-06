@@ -10,7 +10,7 @@ import Data.Maybe ( catMaybes, fromJust )
 
 -- *simple question with list of answers: choose 1
 ask1 :: PId -> [Answer] -> QuestionMessage -> Game Answer
-ask1 p [] _ = fail "ask1 requires nonempty choices"
+ask1 _ [] _ = fail "ask1 requires nonempty choices"
 ask1 p as q = do och <- withPlayer p $ gets playerChan
                  ich <- gets outputChan
                  qid <- newQId
@@ -27,7 +27,7 @@ ask1 p as q = do och <- withPlayer p $ gets playerChan
                    takeMVar mv
 
 ask2 :: PId -> [Answer] -> QuestionMessage -> Game (Answer,Answer)
-ask2 p as _ | length as<2 = fail "ask2 requires at least two choices"
+ask2 _ as _ | length as<2 = fail "ask2 requires at least two choices"
 ask2 p as q = do och <- withPlayer p $ gets playerChan
                  ich <- gets outputChan
                  qid <- newQId
@@ -56,9 +56,8 @@ askMC p ss s = do Choose a <- ask1 p (map (Choose . fst) ss) $
                   fromJust $ lookup a ss
 
 askMC2 :: PId -> [(String,Game ())] -> String -> Game ()
-askMC2 p ss s = do (a,a') <- ask2 p (map (Choose . fst) ss) $
-                             OtherQuestion s
-                   mapM_ (\(Choose a) -> fromJust $ lookup a ss) [a,a']
+askMC2 p ss s = do (a1,a2) <- ask2 p (map (Choose . fst) ss) $ OtherQuestion s
+                   mapM_ (\(Choose a) -> fromJust $ lookup a ss) [a1,a2]
 
 -- *simple question with list of cards: choose between m and n
 askCards :: PId -> [Card] -> QuestionMessage -> (Int,Int) -> Game [Card]
@@ -86,22 +85,23 @@ askCardsRepl filt p cs q (mn,mx) =
          mv <- newEmptyMVar
          let go = writeOutput och $
                   Question qid q (map pickCard cs') (realMin,realMax)
-             verify mv as | length as > realMax = go >> return False
-                          | length as < realMin = go >> return False
-                          | test as cs = do putMVar mv $ catMaybes $
+             verify as | length as > realMax = go >> return False
+                       | length as < realMin = go >> return False
+                       | test as cs = do putMVar mv $ catMaybes $
                                              map ((`lookupCard` cs) . unCard) as
-                                            return True
-                          | otherwise = go >> return False
-         writeOutput ich $ RQ qid $ verify mv
+                                         return True
+                       | otherwise = go >> return False
+         writeOutput ich $ RQ qid verify
          go
          takeMVar mv
     where realMin = min mn $ length cs
           realMax = if mx<0 || mx>length cs then length cs else mx
           test [] _ = True -- as is subset of cs (unordered)
-          test (PickCard cd:as) cs =
-              case lookupCard cd cs of
-                Just c -> test as $ filt c cs
+          test (PickCard cd:as) cards =
+              case lookupCard cd cards of
+                Just c -> test as $ filt c cards
                 Nothing -> False
+          test _ _ = error "something other than PickCard seen in test..."
           unCard a = case a of { PickCard c -> c; _ -> error "impossible" }
-          fixPrice c = do p <- withTurn $ gets priceMod
-                          return $ c { cardPrice = p c }
+          fixPrice c = do price <- withTurn $ gets priceMod
+                          return $ c { cardPrice = price c }
