@@ -155,7 +155,7 @@ weights q (PickCard c)
         | cname c == "Gold" = 40
         | cname c == "Silver" = 10
         | cname c == "Warehouse" = 0
-        | cname c == "Copper" = 0
+        | cname c == "Copper" = 1e-9 -- this just needs to beat curse...
         | cname c == "Curse" = 0
         | cname c == "Estate" = 0
         | cname c == "Chancellor" = 0
