@@ -270,7 +270,10 @@ treasureMap = Card 0 4 "Treasure Map" "..." [Action a]
                                                   "treasure map") (1,1)
                         t <- inTrash this
                         when (not (null cs) && not t) $
-                             gain self deck *<< replicate 4 gold
+                             do gain self deck *<< [gold]
+                                gain self deck *<< [gold]
+                                gain self deck *<< [gold]
+                                gain self deck *<< [gold]
                         trash << this:cs -- everything gets trashed
 
 {-# NOINLINE treasuryData #-}
