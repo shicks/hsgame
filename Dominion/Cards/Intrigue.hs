@@ -65,9 +65,14 @@ bridge = Card 0 4 "Bridge" "..." [action a]
 
 conspirator :: Card
 conspirator = Card 0 4 "Conspirator" "..." [action a]
-    where a = try $ do plusCoin 2
-                       _:_:_ <- filter isAction `fmap` getStack played
-                       plusABCD 1 0 0 1
+    where a = do self <- getSelf
+                 plusCoin 2
+                 cs <- filter isAction `fmap` getStack played
+                 ds <- filter isAction `fmap` getStack (durations self)
+                 when (length (cs++ds) >= 3) $ plusABCD 1 0 0 1
+                 -- STILL broken because of one-shots!
+                 -- probably need a hookPlayed for conspirator to
+                 -- simply keep an IORef Int...?
 
 coppersmith :: Card
 coppersmith = Card 0 4 "Coppersmith" "..." [action a]
