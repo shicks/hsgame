@@ -1,12 +1,13 @@
 module TCP.Chan ( ShowRead(..), handle2io, handle2i, handle2o,
                   pipe, interacting,
-                  Input, readInput, getInput, Output, writeOutput ) where
+                  Input, readInput, getInput, isEmptyInput,
+                  Output, writeOutput ) where
 
 import Control.Monad ( forever )
 import System.IO ( Handle, hPutStrLn, hGetLine )
 import Control.Concurrent ( forkIO )
 import Control.Concurrent.Chan ( Chan, newChan, writeChan, readChan,
-                                 getChanContents )
+                                 isEmptyChan, getChanContents )
 
 class (Show a, Read a) => ShowRead a where
     showLine :: a -> String
@@ -65,3 +66,6 @@ interacting (Input i) o f =
 
 getInput :: Input a -> IO [a] -- lazy
 getInput (Input i) = getChanContents i
+
+isEmptyInput :: Input a -> IO Bool
+isEmptyInput (Input i) = isEmptyChan i
