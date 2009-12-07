@@ -312,7 +312,9 @@ gain p s = IStack gain'' (s p)
                          when (not $ null cs') $
                               tellAll $ CardGain name $ map describeCard cs'
                          return cs'
-          checkSupply c = take 1 `fmap` supplyCards c
+          checkSupply c = do cs <- take 1 `fmap` supplyCards c
+                             aside << cs  -- workaround treasureMap issue
+                             return cs
 
 gain' :: PId -> (PId -> s) -> IStack s
 gain' p s = IStack (thread gain'') (s p)
@@ -325,7 +327,9 @@ gain' p s = IStack (thread gain'') (s p)
 gainSilent :: PId -> (PId -> s) -> IStack s
 gainSilent p s = IStack gain'' (s p)
     where gain'' cs = mapM checkSupply cs >>= thread (runGainHooks p) . concat
-          checkSupply c = take 1 `fmap` supplyCards c
+          checkSupply c = do cs <- take 1 `fmap` supplyCards c
+                             aside << cs
+                             return cs
 
 allCards :: PId -> Game [Card]
 allCards p = (concatMap isp . elems) `fmap` gets gameCards
