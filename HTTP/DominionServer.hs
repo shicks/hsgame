@@ -1,0 +1,6 @@
+module DominionServer where
+
+-- Each player needs to get a unique name...
+-- It would be nice if this were integrated into the chat...
+
+dominionThread :: 

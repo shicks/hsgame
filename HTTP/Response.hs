@@ -3,7 +3,9 @@ module HTTP.Response ( Response(..), ok200,
                        error400, error403, error404, error405, error418,
                        error500, error501, error503,
                        sendResponse, sendResponseHdr,
-                       htmlResponse, htmlResponse', jsResponse ) where
+                       htmlResponse, htmlResponse', jsResponse,
+                       sanitize, jsPrintf
+                     ) where
 
 import System.IO ( hPutStrLn, hPutStr, Handle )
 import Network.HTTP.Headers ( Header(..), HeaderName(..), HasHeaders(..) )
@@ -127,6 +129,8 @@ sendResponse h (Response v c r hs b) = do hPutStrLn h $ v++" "++show c++" "++r
                                           mapM_ (hPutStr h . show) hs
                                           hPutStrLn h ""
                                           hPutStrLn h b
+                                          putStrLn $ "Response "++show c++" "
+                                                       ++take 60 (show b)
 
 -- |Sends just the code and headers - useful for streaming?!?
 sendResponseHdr :: Handle -> Response -> IO ()
@@ -148,3 +152,16 @@ htmlResponse = ok200 "text/html; charset=UTF-8"
 
 jsResponse :: String -> IO Response
 jsResponse = ok200 "text/javascript; charset=UTF-8"
+
+-- these are useful for making responses...
+sanitize :: String -> String
+sanitize [] = []
+sanitize ('\\':s) = '\\':'\\':sanitize s
+sanitize ('"':s) = '\\':'"':sanitize s
+sanitize (s:ss) = s:sanitize ss
+
+jsPrintf :: String -> [String] -> String
+jsPrintf "" _ = ""
+jsPrintf ('%':'s':cs) (s:ss) = '"':sanitize s++'"':jsPrintf cs ss
+jsPrintf ('%':'s':cs) [] = '"':'"':jsPrintf cs [] -- or fail?!?
+jsPrintf (c:cs) ss = c:jsPrintf cs ss

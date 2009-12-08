@@ -1,73 +1,54 @@
+{-# LANGUAGE PatternGuards #-}
+
 module HTTP.ChatServer ( chatServer, chatThread ) where
 
-import HTTP.Request ( Request(..), urlDecode, )
-import HTTP.Response ( Response, error403, jsResponse, blank200 )
+import HTTP.Response ( Response, jsPrintf, blank200, error404 )
+import HTTP.LoginServer ( LoginMessage(..), Agent )
 
-import Control.Concurrent ( forkIO, threadDelay )
-import TCP.Chan ( Input, Output, pipe, isEmptyInput,
-                  writeOutput, readInput )
-import Control.Concurrent.MVar ( MVar, newEmptyMVar, putMVar, takeMVar )
+import TCP.Chan ( Input, Output, writeOutput, readInput )
 import Data.Maybe ( fromMaybe )
-import Network.URI ( URI(..), URIAuth(..) )
+import Control.Monad ( forM_ )
 
-authServer :: (String -> String -> String -> Request -> IO Response)
-           -> Request -> IO Response
-authServer srv req = do case rqURI req of
-                          Nothing -> srv "" "*" "" req
-                          Just uri -> srv (user uri) (uriPath uri)
-                                          (query uri) req
-    where user' uri = (takeWhile (not . (`elem`":@")) .
-                       uriUserInfo) `fmap` uriAuthority uri
-          user uri = fromMaybe "" $ user' uri
-          query uri = dropWhile (=='?') $ uriQuery uri
+data Chat = Join Agent (String -> String)
+          | Leave Agent
+          | Say String
 
-data Chat = NC String | C String | P String (MVar Response)
+-- The javascript client can tell US how it wants us to respond, i.e.
+-- where to store the answer...
+chatServer :: Output Chat
+           -> Agent -> [String] -> [(String,String)] -> IO Response
+chatServer o a ps q = do putStrLn $ "chatServer <o> "++show a++" "++show ps++" "
+                                  ++show q
+                         chatServer' o a ps q
 
-chatServer :: Output Chat -> (Request -> IO Response) -> Request -> IO Response
-chatServer ct srv = authServer go
-    where go _ "/chat/login" q _ =
-              do let u = fromMaybe "anon" $ lookup "u" $ urlDecode q
-                 writeOutput ct $ NC u
-                 writeOutput ct $ C $ "Welcome, " ++ u
-                 jsResponse "$(\"#chatarea\").show();\n"
-                       -- might need to change $("#name").val()
-          go _ "/chat/say" q _ =
-              do let u = fromMaybe "anon" $ lookup "u" $ urlDecode q
-                 writeOutput ct $ C (u++": "++text)
-                 blank200
-            where text = fromMaybe "" $ lookup "q" $ urlDecode q
-          go _ "/chat/poll" q _ =
-              do let u = fromMaybe "anon" $ lookup "u" $ urlDecode q
-                 rsp <- newEmptyMVar
-                 writeOutput ct $ P u rsp
-                 takeMVar rsp
-          go _ _ _ r = srv r -- pass on to next server
+chatServer' :: Output Chat
+           -> Agent -> [String] -> [(String,String)] -> IO Response
+chatServer' outp a ["join"] q = do writeOutput outp $ Join a f
+                                   writeOutput outp $ Say ("Welcome "++show a)
+                                   blank200
+    where f s = jsPrintf (fromMaybe "$.chat.say(%s+\"\\n\")" $ lookup "q" q) [s]
+chatServer' outp a ["leave"] _ = do writeOutput outp $ Leave a
+                                    writeOutput outp $ Say ("Goodbye "++show a)
+                                    blank200
+chatServer' outp a ["say"] q = do let msg = fromMaybe "(noinput)" $ lookup "q" q
+                                  writeOutput outp $ Say (show a++": "++msg)
+                                  blank200
+chatServer' _ _ _ _ = putStrLn "chatServer _ _ _ _" >> error404
 
-chatThread :: Input Chat -> [(String,(Input String,Output String))] -> IO ()
-chatThread inp ag = do msg <- readInput inp
-                       case msg of
-                         NC name -> do chans <- pipe
-                                       chatThread inp ((name,chans):ag)
-                         C s -> do mapM_ (\(_,(_,o)) -> writeOutput o s) ag
-                                   chatThread inp ag
-                         P name mv -> do forkIO $ do
-                                           let mc = lookup name ag
-                                           case mc of
-                                             Nothing -> do
-                                                     threadDelay 5000000
-                                                     putMVar mv =<< error403
-                                             Just (c,_) -> emptyChan c mv
-                                         chatThread inp ag
-    where emptyChan c mv = do line <- readInput c
-                              rest <- ec' c
-                              putMVar mv =<< jsResponse
-                                             (unlines $ map say (line:rest))
-          ec' c = do e <- isEmptyInput c
-                     if e then return [] else do l <- readInput c
-                                                 (l:) `fmap` ec' c
-          say s = "$(\"#chat\").append(\""++sanitize s++"\\n\");\n"
-                  ++ "$(\"#chat\").scrollTop(1e10);\n"
-          sanitize [] = []
-          sanitize ('\\':s) = '\\':'\\':sanitize s
-          sanitize ('"':s) = '\\':'"':sanitize s
-          sanitize (s:ss) = s:sanitize ss
+chatThread :: Input Chat -> Output LoginMessage
+           -> [(Agent,String -> String)] -> IO ()
+chatThread inp outp ags = do msg <- readInput inp
+                             case msg of
+                               Join a f -> chatThread inp outp $ replace a f ags
+                               Leave a  -> chatThread inp outp $ remove a ags
+                               Say s -> do putStrLn $"Say "++show s
+                                           forM_ ags $ \(a,f) ->
+                                               writeOutput outp $
+                                               SendMessage a $ f s
+                                           chatThread inp outp ags
+    where replace a f [] = [(a,f)]
+          replace a f ((a',f'):as) | a==a'     = (a,f):as
+                                   | otherwise = (a',f'):replace a f as
+          remove _ [] = []
+          remove a ((a',f'):as) | a==a'     = as
+                                | otherwise = (a',f'):remove a as

@@ -28,6 +28,9 @@ httpServer port f =
             do mreq <- getRequest n h
                case mreq of
                  Just req -> do
+                           --putStrLn $ show $ req { rqHeaders = [] }
+                           putStrLn $ "Request "++show (rqMethod req)
+                                    ++" "++take 60 (show (rqURI req))
                            f h req
                            let conn = case (map toLower) `fmap`
                                            findHeader HdrConnection req of

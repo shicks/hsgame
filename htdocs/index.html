@@ -19,35 +19,63 @@ Your name, please:
 </div>
 <div id="test"></div>
 
-<script>
-  $(function(){
-    var poll = function(){
-      var name = $("#name").val();
-      $.ajax({
-        url: "/chat/poll",
-        data: {u:name},
-        complete: poll,
-        dataType: "script"
-      });
-    }
-    function login(){
-      var name = $("#name").val();
-      $("#loginarea").hide();
-      $.ajax({
-        url: "/chat/login",
-        data: {u:name},
-        complete: poll,
-        dataType: "script"});
-    }
-    $("#login").bind("click",function(e){login()});
-    function say(){
-      var inp = $("#input");
-      var txt = $("#chat");
-      $.ajax({url:"/chat/say",data:{u:$("#name").val(),q:inp.attr("value")}});
-      inp.val("");
-    }
+<script>$(function(){
 
-    $("#input").bind("keypress",function(e){if(e.which==13)say();});
-    $("#name").bind("keypress",function(e){if(e.which==13)login();});
-  });
-</script>
+  var pollFunction = function(){
+    $.ajax({
+      url: "/poll",
+      data: {u:$.user},
+      complete: poll,
+      dataType: "script"
+    });
+  }
+  var poll = pollFunction;
+
+  $.login = {
+    success: function(){
+      $.user = $("#name").val();
+      $("#loginarea").hide();
+      $("#chatarea").show();
+      poll = pollFunction;
+      $.ajax({url:"/chat/join",data:{u:$.user},dataType:"script"});
+      poll();
+    },
+    fail: function(){
+      alert("Username in use.");
+    },
+    relog: function(){
+      $.user = "";            // undefined?
+      $("#loginarea").show();
+      $("#chatarea").hide();
+      poll = function(){};    // can we stop polling?
+      $.ajax({url:"/login",data:{u:$.user},dataType:"script"});
+    }
+  };
+
+  $.chat = {
+    say: function(msg){
+      $("#chat").append(msg).scrollTop(1e10);
+    }
+  };
+
+  function login(){
+    var name = $("#name").val();
+    $("#loginarea").hide();
+    $.ajax({
+      url: "/login",
+      data: {u:name},
+      dataType: "script"});
+  }
+  $("#login").bind("click",function(e){login()});
+  $("#name").bind("keypress",function(e){if(e.which==13)login();});
+
+  function say(){
+    var inp = $("#input");
+    var txt = $("#chat");
+    $.ajax({url:"/chat/say",data:{u:$.user,q:inp.attr("value")}});
+    inp.val("");
+  }
+  $("#say").bind("click",function(e){say()});
+  $("#input").bind("keypress",function(e){if(e.which==13)say();});
+
+});</script>
