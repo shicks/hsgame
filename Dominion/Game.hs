@@ -29,6 +29,7 @@ start ps c cs = do (chi,cho) <- pipe
                      mapM_ fillDeck allPlayers
                      mapM_ (draw 5) allPlayers
                      mapM_ (runSetupHooks cs) cs
+                     initializeStackHooks allPlayers
                      let sup = concatMap copy cs ++ replicate 40 copper
                                ++ concatMap (replicate 30) [silver,gold]
                                ++ concatMap copy [estate,duchy]
@@ -42,7 +43,7 @@ start ps c cs = do (chi,cho) <- pipe
                        addCards (replicate 3 estate ++ replicate 7 copper)
           emptyPlayer (i,(s,card)) = PlayerState i s card []
           emptyState chi cho =
-              GameState (map emptyPlayer $ zip [0..] ps) (array (0,-1) [])
+              GameState (map emptyPlayer $ zip [0..] ps) (array (0,-1) []) []
                             0 newTurn [] [] [] chi cho [0..]
           copy cd = replicate (if isVictory cd then vic else 10) cd
           vic = if length ps<3 then 8 else 12

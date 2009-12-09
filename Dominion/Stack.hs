@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
 
-module Dominion.Stack ( OStack, UStack, IStack, printStack,
-                        addCards, orderedStack, unorderedStack,
+module Dominion.Stack ( Deck, UStackName, IStack, printStack,
+                        addCards, initializeStackHooks,
                         (*<<), (.<<), (<<), (*<#), (.<#), (<#),
                         (<*), (<.), (*<<<), (.<<<), (<<<), (#<), (#<#),
                         stackName, getStack, top, bottom,
@@ -17,7 +17,7 @@ module Dominion.Stack ( OStack, UStack, IStack, printStack,
 import Dominion.Types
 import Dominion.Message
 
-import Control.Monad ( (>=>), forM, forM_, when, filterM )
+import Control.Monad ( forM, forM_, when, filterM )
 import Control.Monad.State ( gets, modify )
 import Control.Monad.Trans ( liftIO )
 import System.Random ( randomRIO )
@@ -47,56 +47,6 @@ printStack s x = do cs <- getStack x
                     liftIO $ mapM_ (\c -> putStrLn $ "  " ++ pretty c) cs
                     liftIO $ putStrLn "#"
 
-data OStack = OStack { -- ordered stack
-      oAddToTop     :: [Card] -> Game (),  -- top is low
-      oAddToBottom  :: [Card] -> Game (),
-      oGetStack     :: Int -> Game [Card], -- top is front
-      oStackName    :: StackName
-    }
-
-orderedStack :: StackName -> OStack
-orderedStack sn = OStack { oAddToTop = att, oAddToBottom = atb,
-                           oGetStack = gs, oStackName = sn }
-    where att :: [Card] -> Game ()
-          att cs = do old <- gs'
-                      let mindep = if null old
-                                   then fromIntegral $ length cs
-                                   else fst $ head old
-                          upd depth c = (cardId c, (sn,depth,c))
-                          depths = [mindep-1,mindep-2..]
-                          updates = zipWith upd depths cs
-                      modify $ \s -> s { gameCards = gameCards s//updates }
-          atb :: [Card] -> Game ()
-          atb cs = do old <- gs'
-                      let maxdep = last $ (-1):map fst old -- default to 0
-                          upd depth c = (cardId c, (sn,depth,c))
-                          depths = [maxdep+1,maxdep+2..]
-                          updates = zipWith upd depths cs
-                      modify $ \s -> s { gameCards = gameCards s//updates }
-          gs' = (sortBy cmpfst . concatMap issn . elems) `fmap` gets gameCards
-          gs _ = map snd `fmap` gs'
-          cmpfst = comparing fst
-          issn (st,x,c) = if st == sn then [(x,c)] else []
-
-data UStack = UStack { -- unordered stack
-      uAddToStack   :: [Card] -> Game (),
-      uGetStack    :: Int -> Game [Card],
-      uStackName    :: StackName
-    }
-
-unorderedStack :: StackName -> UStack
-unorderedStack sn = UStack { uAddToStack = add, uGetStack = gs,
-                             uStackName = sn }
-    where add cs = do let upd c = (cardId c, (sn,fromIntegral $ cardId c,c))
-                          updates = map upd cs
-                      modify $ \s -> s { gameCards = gameCards s//updates }
-          gs _ = (map snd . concatMap issn . elems) `fmap` gets gameCards
-          issn (st,x,c) = if st == sn
-                          then [(x,c)]
-                          else []
-
-class InputStack s where
-    modifyInput :: ([Card] -> Game [Card]) -> s -> s
 class NamedStack s where
     stackName :: s -> StackName
 class OrderedInputStack s where
@@ -109,26 +59,38 @@ class OutputStack s where
 class OutputStack s => OrderedOutputStack s where
     orderedGetStack :: s -> Int -> Game [Card]
 
-instance OrderedInputStack OStack where
-    addToBottom = oAddToBottom
-    addToTop = oAddToTop
-instance OrderedOutputStack OStack where
-    orderedGetStack = oGetStack
-instance OutputStack OStack where
-    unorderedGetStack = oGetStack
-instance NamedStack OStack where
-    stackName = oStackName
-instance InputStack OStack where
-    modifyInput f (OStack att atb gs sn) = OStack (f>=>att) (f>=>atb) gs sn
+instance NamedStack StackName where
+    stackName = id
+instance OutputStack StackName where
+    unorderedGetStack sn _ =
+        (map snd . sortBy (comparing fst) . concatMap issn . elems)
+        `fmap` gets gameCards
+        where issn (st,x,c) = if st == sn then [(x,c)] else []
+instance OrderedOutputStack StackName where
+    orderedGetStack = unorderedGetStack
+instance OrderedInputStack StackName where
+    addToTop sn cs =
+        do hook <- lookup sn `fmap` gets stackHooks
+           new <- maybe (return cs) ($ cs) hook
+           old <- orderedGetStack sn 0
+           let upd depth c = (cardId c, (sn,depth,c))
+               updates = zipWith upd [1..] (reverse new++old)
+           modify $ \s -> s { gameCards = gameCards s//updates}
+    addToBottom sn cs =
+        do hook <- lookup sn `fmap` gets stackHooks
+           new <- maybe (return cs) ($ cs) hook
+           old <- orderedGetStack sn 0
+           let upd depth c = (cardId c, (sn,depth,c))
+               updates = zipWith upd [1..] (old++new)
+           modify $ \s -> s { gameCards = gameCards s//updates }
 
-instance UnorderedInputStack UStack where
-    addToStack = uAddToStack
-instance OutputStack UStack where
-    unorderedGetStack = uGetStack
-instance NamedStack UStack where
-    stackName = uStackName
-instance InputStack UStack where
-    modifyInput f (UStack add gs sn) = UStack (f>=>add) gs sn
+newtype UStackName = USN StackName
+instance NamedStack UStackName where
+    stackName (USN x) = x
+instance OutputStack UStackName where
+    unorderedGetStack (USN sn) n = unorderedGetStack sn n
+instance UnorderedInputStack UStackName where
+    addToStack (USN sn) = addToTop sn
 
 get :: OutputStack s => Int -> s -> Game [Card]
 get = flip unorderedGetStack
@@ -213,75 +175,95 @@ draw n p = do cs <-n<* deck p
               tellP p $ CardDraw name $ Right $ map describeCard cs
               tellOppOf p $ CardDraw name $ Left $ length cs
 
-hand :: PId -> UStack
-hand p = unorderedStack (SPId p "hand")
+hand :: PId -> UStackName
+hand p = USN $ SPId p "hand"
 
 -- we've built in the reshuffling mechanism here...!
-deck :: PId -> OStack
-deck p = OStack att atb gs sn
-    where OStack att atb gs0 sn = orderedStack (SPId p "deck")
-          gs n = do x <- gs0 undefined {- ignored -}
-                    if length x >= n
-                       then return x
-                       else do d <- get 0 $ discard p
-                               d' <- shuffle d
-                               atb d'
-                               name <- withPlayer p $ gets playerName
-                               tellAll $ Reshuffled name
-                               return $ x++d'
+newtype Deck = Deck PId
+instance OrderedInputStack Deck where
+    addToBottom = addToBottom . stackName
+    addToTop = addToTop . stackName
+instance OrderedOutputStack Deck where
+    orderedGetStack d@(Deck p) n =
+        do x <- orderedGetStack (stackName d) n
+           if length x >= n
+               then return x
+               else do cs <- get 0 $ discard p
+                       cs' <- shuffle cs
+                       addToBottom d cs'
+                       name <- withPlayer p $ gets playerName
+                       tellAll $ Reshuffled name
+                       return $ x++cs'
+instance OutputStack Deck where
+    unorderedGetStack = orderedGetStack
+instance NamedStack Deck where
+    stackName (Deck p) = SPId p "deck"
 
-discard :: PId -> OStack
-discard p = modifyInput (thread f) $ orderedStack $ SPId p "discard"
-    where f cs = do cs' <- filterM from cs
-                    name <- withPlayer p $ gets playerName
-                    when (not $ null cs') $
-                         tellAll $ CardDiscard name $ map describeCard cs'
+deck :: PId -> Deck
+deck = Deck
+
+initializeStackHooks :: [PId] -> Game ()
+initializeStackHooks pids = modify $ \s -> s { stackHooks = hs ++ stackHooks s }
+    where hs = playhook:(stackName trash, trashHook):map discardHook pids
+          discardHook pid = (discard pid, dh pid)
+          dh pid cs = do cs' <- filterM from cs
+                         name <- withPlayer pid $ gets playerName
+                         when (not $ null cs') $
+                              tellAll $ CardDiscard name $ map describeCard cs'
+                         return cs
           from c = do loc <- cardWhere c
                       case loc of
                         SN "aside" -> return True
                         SPId _ "hand" -> return True
                         _ -> return False
-
-mat :: String -> PId -> OStack
-mat n p = orderedStack $ SPId p $ "stack-"++n
-
-durations :: PId -> UStack
-durations p = unorderedStack $ SPId p "durations"
-
-played :: UStack
-played = modifyInput (thread f) $ unorderedStack $ SN "played"
-    where f cs = do n <- getSelf >>= withPlayer `flip` gets playerName
-                    tellAll $ CardPlay n $ map describeCard cs
-
-prevDuration :: UStack
-prevDuration = unorderedStack $ SN "prev-duration"
-
-aside :: UStack
-aside = unorderedStack $ SN "aside"
-
-trash :: UStack
-trash = modifyInput (thread f) $ unorderedStack $ SN "trash"
-    -- this is complicated because we need to figure out who OWNED the
-    -- card before, and we'd like to group it into a single message,
-    -- if possible, for each owner.
-    where f cs = do cs' <- forM cs $ \c -> do
-                             loc <- cardWhere c
-                             owner <- case loc of
-                                        SPId p _ -> withPlayer p $
-                                                    gets playerName
-                                        SN "played" -> do p <- getSelf
-                                                          withPlayer p $
+          playhook = (stackName played, ph)
+              where ph cs =
+                        do n <- getSelf >>= withPlayer `flip` gets playerName
+                           tellAll $ CardPlay n $ map describeCard cs
+                           return cs
+          -- this is complicated because we need to figure out who
+          -- OWNED the card before, and we'd like to group it into a
+          -- single message, if possible, for each owner.
+          trashHook cs =
+              do cs' <- forM cs $ \c ->
+                        do loc <- cardWhere c
+                           owner <- case loc of
+                                      SPId p _ -> withPlayer p $ gets playerName
+                                      SN "played" -> do p <- getSelf
+                                                        withPlayer p $
                                                             gets playerName
-                                        _ -> return "Somebody"
-                             return (owner,c)
-                    let srt = groupBy ((==) `on` fst) $
-                              sortBy (comparing fst) cs'
-                    forM_ srt $ \ss -> do let p = fst $ head ss
-                                              ss' = map (describeCard.snd) ss
-                                          tellAll $ CardTrash p ss'
+                                      _ -> return "Somebody"
+                           return (owner,c)
+                 let srt = groupBy ((==) `on` fst) $ sortBy (comparing fst) cs'
+                 forM_ srt $ \ss ->
+                     do let p = fst $ head ss
+                            ss' = map (describeCard.snd) ss
+                        tellAll $ CardTrash p ss'
+                 return cs
 
-supply :: UStack -- messages?
-supply = unorderedStack $ SN "supply"
+discard :: PId -> StackName
+discard p = SPId p "discard"
+
+mat :: String -> PId -> StackName
+mat n p = SPId p $ "stack-"++n
+
+durations :: PId -> UStackName
+durations p = USN $ SPId p "durations"
+
+played :: UStackName
+played = USN $ SN "played"
+
+prevDuration :: UStackName
+prevDuration = USN $ SN "prev-duration"
+
+aside :: UStackName
+aside = USN $ SN "aside"
+
+trash :: UStackName
+trash = USN $ SN "trash"
+
+supply :: UStackName -- messages?
+supply = USN $ SN "supply"
 
 allSupply :: Game [Card] -- rewrite in terms of supply?
 allSupply = (concatMap iss . elems) `fmap` gets gameCards
@@ -295,8 +277,7 @@ inSupply :: Card -> Game Bool
 inSupply c = (not . null) `fmap` supplyCards c
 
 inTrash :: Card -> Game Bool
-inTrash c = do loc <- cardWhere c
-               return $ loc == stackName trash
+inTrash c = (== stackName trash) `fmap` cardWhere c
 
 -- *this is a funny distinction.  @gain@ will be used only for
 -- gaining cards from the supply, while @gain'@ will be used for

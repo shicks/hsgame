@@ -82,6 +82,7 @@ instance Functor Game where
 data GameState = GameState {
       gamePlayers  :: [PlayerState],
       gameCards    :: Array CId (StackName, Integer, Card),
+      stackHooks   :: [(StackName, [Card] -> Game [Card])],
       currentTurn  :: PId,
       turnState    :: TurnState,
       hookGain     :: [PId -> [Card] -> Game ()],  {- for smuggler -}

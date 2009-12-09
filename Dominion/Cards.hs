@@ -34,7 +34,7 @@ promos = [blackMarket, envoy]
 -- setup hook, but that seems sillier.
 blackMarket :: Card
 blackMarket = Card 0 3 "Black Market" "..." [Hook (SetupHook setup), action a]
-    where bmDeck = orderedStack $ SN "blackMarket"
+    where bmDeck = SN "blackMarket"
           notIn cs c = not $ cardName c `elem` map cardName cs
           setup cs = bmDeck *<# addCards =<< mapM runHook =<<
                                 shuffle (filter (notIn cs) allDecks)
