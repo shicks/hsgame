@@ -91,13 +91,12 @@ explorer :: Card
 explorer = Card 0 5 "Explorer" "..." [action a]
     where a = do (self,h,_) <- getSHP
                  let provs = filter (sameName province) h
-                     ohand = (`SPId` "hand")
                  if null provs
-                    then gainFromSupply ohand self silver 1
+                    then gainFromSupply hand self silver 1
                     else askMC self `flip` "Reveal a province?" $
                          [("Yes",do revealCards self (take 1 provs) "hand"
-                                    gainFromSupply ohand self gold 1),
-                          ("No",gainFromSupply ohand self silver 1)]
+                                    gainFromSupply hand self gold 1),
+                          ("No",gainFromSupply hand self silver 1)]
 
 fishingVillage :: Card
 fishingVillage = Card 0 3 "Fishing Village" "..." [duration a]
@@ -158,7 +157,7 @@ nativeVillage = Card 0 2 "Native Village" "..." [action a]
                           intercalate ", " cs
                  askMC self `flip` "Choose one" $
                            [("Set aside",setAside self),
-                            ("Draw from mat",hand self <<< nvMat self)]
+                            ("Draw from mat",hand self *<<< nvMat self)]
           setAside self = do nvMat self *<#1<* deck self
                              cs <- map cardName `fmap` getStack (nvMat self)
                              tellSelf $ InfoMessage $ "Native Village Mat: "++

@@ -234,8 +234,7 @@ torturer = Card 0 5 "Torturer" "..." [action a]
                  attackNow "torturer" $ \_ opp -> try $ do
                    let -- FIXME: this is a really hokey workaround for
                        -- UStack business...
-                       ohand = (`SPId` "hand")
-                       curs = try $ gainFromSupply ohand opp curse 1
+                       curs = try $ gainFromSupply hand opp curse 1
                        disc = forceDiscard "torturer" opp 2
                    askMC opp [("Discard 2 cards",disc),
                               ("Gain a Curse into hand",curs)]
@@ -246,9 +245,8 @@ tradingPost = Card 0 5 "Trading Post" "..." [action a]
     where a = do self <- getSelf
                  cs <- askCardsHand (TrashBecause "trading post") (2,2)
                  trash << cs
-                 let ohand = (`SPId` "hand")
                  when (length cs == 2) $
-                      try $ gainFromSupply ohand self silver 1
+                      try $ gainFromSupply hand self silver 1
 
 tribute :: Card
 tribute = Card 0 5 "Tribute" "..." [action a]

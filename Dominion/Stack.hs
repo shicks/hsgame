@@ -49,9 +49,6 @@ printStack s x = do cs <- getStack x
 
 class NamedStack s where
     stackName :: s -> StackName
-class OrderedInputStack s where
-    addToBottom :: s -> [Card] -> Game ()
-    addToTop    :: s -> [Card] -> Game ()
 class UnorderedInputStack s where
     addToStack :: s -> [Card] -> Game ()
 class OutputStack s where
@@ -68,21 +65,26 @@ instance OutputStack StackName where
         where issn (st,x,c) = if st == sn then [(x,c)] else []
 instance OrderedOutputStack StackName where
     orderedGetStack = unorderedGetStack
-instance OrderedInputStack StackName where
-    addToTop sn cs =
-        do hook <- lookup sn `fmap` gets stackHooks
-           new <- maybe (return cs) ($ cs) hook
-           old <- orderedGetStack sn 0
-           let upd depth c = (cardId c, (sn,depth,c))
-               updates = zipWith upd [1..] (reverse new++old)
-           modify $ \s -> s { gameCards = gameCards s//updates}
-    addToBottom sn cs =
-        do hook <- lookup sn `fmap` gets stackHooks
-           new <- maybe (return cs) ($ cs) hook
-           old <- orderedGetStack sn 0
-           let upd depth c = (cardId c, (sn,depth,c))
-               updates = zipWith upd [1..] (old++new)
-           modify $ \s -> s { gameCards = gameCards s//updates }
+
+addToTop :: NamedStack s => s -> [Card] -> Game ()
+addToTop s0 cs =
+    do let sn = stackName s0
+       hook <- lookup sn `fmap` gets stackHooks
+       new <- maybe (return cs) ($ cs) hook
+       old <- orderedGetStack sn 0
+       let upd depth c = (cardId c, (sn,depth,c))
+           updates = zipWith upd [1..] (reverse new++old)
+       modify $ \s -> s { gameCards = gameCards s//updates}
+
+addToBottom :: NamedStack s => s -> [Card] -> Game ()
+addToBottom s0 cs =
+    do let sn = stackName s0
+       hook <- lookup sn `fmap` gets stackHooks
+       new <- maybe (return cs) ($ cs) hook
+       old <- orderedGetStack sn 0
+       let upd depth c = (cardId c, (sn,depth,c))
+           updates = zipWith upd [1..] (old++new)
+       modify $ \s -> s { gameCards = gameCards s//updates }
 
 newtype UStackName = USN StackName
 instance NamedStack UStackName where
@@ -115,7 +117,7 @@ getStack :: OutputStack s => s -> Game [Card]
 getStack = get 0
 
 infixr 1 *<<, .<<, <<
-(*<<), (.<<) :: OrderedInputStack s => s -> [Card] -> Game ()
+(*<<), (.<<) :: NamedStack s => s -> [Card] -> Game ()
 (*<<) = addToTop
 (.<<) = addToBottom
 (<<) :: UnorderedInputStack s => s -> [Card] -> Game ()
@@ -124,7 +126,7 @@ infixr 1 *<<, .<<, <<
 -- These are to be combine with (<*) and (<.) to make e.g. *<#5<*
 -- same precedence as =<<
 infixr 1 *<#, .<#, <#
-(*<#), (.<#) :: OrderedInputStack s => s -> Game [Card] -> Game ()
+(*<#), (.<#) :: NamedStack s => s -> Game [Card] -> Game ()
 (*<#) = (=<<) . (*<<)
 (.<#) = (=<<) . (.<<)
 (<#) :: UnorderedInputStack s => s -> Game [Card] -> Game ()
@@ -152,7 +154,7 @@ infixr 1 <., <*
 (<*) = top
 
 infix 1 .<<<, *<<<, <<<
-(.<<<), (*<<<) :: (OrderedInputStack s1,OutputStack s2) => s1 -> s2 -> Game ()
+(.<<<), (*<<<) :: (NamedStack s1,OutputStack s2) => s1 -> s2 -> Game ()
 (.<<<) to from = get 0 from >>= (to.<<)
 (*<<<) to from = get 0 from >>= (to*<<)
 (<<<) :: (UnorderedInputStack s1,OutputStack s2) => s1 -> s2 -> Game ()
@@ -170,9 +172,6 @@ hand p = USN $ SPId p "hand"
 
 -- we've built in the reshuffling mechanism here...!
 newtype Deck = Deck PId
-instance OrderedInputStack Deck where
-    addToBottom = addToBottom . stackName
-    addToTop = addToTop . stackName
 instance OrderedOutputStack Deck where
     orderedGetStack d@(Deck p) n =
         do x <- orderedGetStack (stackName d) n
@@ -292,10 +291,10 @@ buyCards p cs = do runBuyHooks p cs
                    tellAll $ CardBuy name $ map describeCard cs
                    return cs
 
-gainCardsTop :: OrderedInputStack s => (PId -> s) -> PId -> [Card] -> Game ()
+gainCardsTop :: NamedStack s => (PId -> s) -> PId -> [Card] -> Game ()
 gainCardsTop out p cs = out p *<# gainCards p cs
 
-gainFromSupply :: OrderedInputStack s =>
+gainFromSupply :: NamedStack s =>
                   (PId -> s) -> PId -> Card -> Int -> Game ()
 gainFromSupply out p card num =
     do c <- supplyCards card >>= (gainCards p . take num)

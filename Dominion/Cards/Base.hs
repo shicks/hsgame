@@ -143,8 +143,7 @@ mine = Card 0 5 "Mine" "..." [action $ try a]
                  sup <- filter isTreasure `fmap`
                         supplyCosting (<=(price c+3))
                  cnew <- askCards self sup SelectGain (1,1)
-                 let ohand = (`SPId` "hand") -- FIXME!
-                 gainCardsTop ohand self cnew
+                 gainCardsTop hand self cnew
 
 moat :: Card
 moat = Card 0 2 "Moat" "..." [action $ plusCard 2,Reaction r]
