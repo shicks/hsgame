@@ -47,7 +47,7 @@ printStack s x = do cs <- getStack x
                     liftIO $ mapM_ (\c -> putStrLn $ "  " ++ pretty c) cs
                     liftIO $ putStrLn "#"
 
-class NamedStack s where
+class Stack s where
     stackName :: s -> StackName
 class UnorderedInputStack s where
     addToStack :: s -> [Card] -> Game ()
@@ -56,7 +56,7 @@ class OutputStack s where
 class OutputStack s => OrderedOutputStack s where
     orderedGetStack :: s -> Int -> Game [Card]
 
-instance NamedStack StackName where
+instance Stack StackName where
     stackName = id
 instance OutputStack StackName where
     unorderedGetStack sn _ =
@@ -66,7 +66,7 @@ instance OutputStack StackName where
 instance OrderedOutputStack StackName where
     orderedGetStack = unorderedGetStack
 
-addToTop :: NamedStack s => s -> [Card] -> Game ()
+addToTop :: Stack s => s -> [Card] -> Game ()
 addToTop s0 cs =
     do let sn = stackName s0
        hook <- lookup sn `fmap` gets stackHooks
@@ -76,7 +76,7 @@ addToTop s0 cs =
            updates = zipWith upd [1..] (reverse new++old)
        modify $ \s -> s { gameCards = gameCards s//updates}
 
-addToBottom :: NamedStack s => s -> [Card] -> Game ()
+addToBottom :: Stack s => s -> [Card] -> Game ()
 addToBottom s0 cs =
     do let sn = stackName s0
        hook <- lookup sn `fmap` gets stackHooks
@@ -87,7 +87,7 @@ addToBottom s0 cs =
        modify $ \s -> s { gameCards = gameCards s//updates }
 
 newtype UStackName = USN StackName
-instance NamedStack UStackName where
+instance Stack UStackName where
     stackName (USN x) = x
 instance OutputStack UStackName where
     unorderedGetStack (USN sn) n = unorderedGetStack sn n
@@ -117,7 +117,7 @@ getStack :: OutputStack s => s -> Game [Card]
 getStack = get 0
 
 infixr 1 *<<, .<<, <<
-(*<<), (.<<) :: NamedStack s => s -> [Card] -> Game ()
+(*<<), (.<<) :: Stack s => s -> [Card] -> Game ()
 (*<<) = addToTop
 (.<<) = addToBottom
 (<<) :: UnorderedInputStack s => s -> [Card] -> Game ()
@@ -126,7 +126,7 @@ infixr 1 *<<, .<<, <<
 -- These are to be combine with (<*) and (<.) to make e.g. *<#5<*
 -- same precedence as =<<
 infixr 1 *<#, .<#, <#
-(*<#), (.<#) :: NamedStack s => s -> Game [Card] -> Game ()
+(*<#), (.<#) :: Stack s => s -> Game [Card] -> Game ()
 (*<#) = (=<<) . (*<<)
 (.<#) = (=<<) . (.<<)
 (<#) :: UnorderedInputStack s => s -> Game [Card] -> Game ()
@@ -154,7 +154,7 @@ infixr 1 <., <*
 (<*) = top
 
 infix 1 .<<<, *<<<, <<<
-(.<<<), (*<<<) :: (NamedStack s1,OutputStack s2) => s1 -> s2 -> Game ()
+(.<<<), (*<<<) :: (Stack s1,OutputStack s2) => s1 -> s2 -> Game ()
 (.<<<) to from = get 0 from >>= (to.<<)
 (*<<<) to from = get 0 from >>= (to*<<)
 (<<<) :: (UnorderedInputStack s1,OutputStack s2) => s1 -> s2 -> Game ()
@@ -185,7 +185,7 @@ instance OrderedOutputStack Deck where
                        return $ x++cs'
 instance OutputStack Deck where
     unorderedGetStack = orderedGetStack
-instance NamedStack Deck where
+instance Stack Deck where
     stackName (Deck p) = SPId p "deck"
 
 deck :: PId -> Deck
@@ -291,10 +291,10 @@ buyCards p cs = do runBuyHooks p cs
                    tellAll $ CardBuy name $ map describeCard cs
                    return cs
 
-gainCardsTop :: NamedStack s => (PId -> s) -> PId -> [Card] -> Game ()
+gainCardsTop :: Stack s => (PId -> s) -> PId -> [Card] -> Game ()
 gainCardsTop out p cs = out p *<# gainCards p cs
 
-gainFromSupply :: NamedStack s =>
+gainFromSupply :: Stack s =>
                   (PId -> s) -> PId -> Card -> Int -> Game ()
 gainFromSupply out p card num =
     do c <- supplyCards card >>= (gainCards p . take num)
