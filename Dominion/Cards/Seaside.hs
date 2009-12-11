@@ -59,7 +59,7 @@ ambassador = Card 0 3 "Ambassador" "..." [action $ try a]
                  tellAll $ InfoMessage $ name++" ungained "++show num
                                          ++" copies of "++cardName c
                  supply << take num (filter (sameName c) h)
-                 att $ \_ opp -> gain opp discard *<< [c]
+                 att $ \_ opp -> gainFromSupply discard opp c 1
 
 bazaar :: Card
 bazaar = Card 0 5 "Bazaar" "..." [action $ plusABCD 2 0 1 1]
@@ -85,18 +85,19 @@ embargo = Card 0 2 "Embargo" "..." [oneShot $ try a]
                  [c] <- askCards self sup (OtherQuestion "embargo") (1,1)
                  modify $ \s -> s { hookBuy = hook c:hookBuy s }
           hook e p cs = forM_ cs $ \c -> when (sameName c e) $
-                                         gain p discard *<< [curse]
+                                         gainFromSupply discard p curse 1
 
 explorer :: Card
 explorer = Card 0 5 "Explorer" "..." [action a]
     where a = do (self,h,_) <- getSHP
                  let provs = filter (sameName province) h
+                     ohand = (`SPId` "hand")
                  if null provs
-                    then gain self hand << [silver]
+                    then gainFromSupply ohand self silver 1
                     else askMC self `flip` "Reveal a province?" $
                          [("Yes",do revealCards self (take 1 provs) "hand"
-                                    gain self hand << [gold]),
-                          ("No",gain self hand << [silver])]
+                                    gainFromSupply ohand self gold 1),
+                          ("No",gainFromSupply ohand self silver 1)]
 
 fishingVillage :: Card
 fishingVillage = Card 0 3 "Fishing Village" "..." [duration a]
@@ -227,7 +228,7 @@ seaHag :: Card
 seaHag = Card 0 4 "Sea Hag" "..." [action a]
     where a = attackNow "sea hag" $ \_ opp -> do
                 discard opp *<#1<* deck opp
-                gain opp deck *<< [curse]
+                gainFromSupply deck opp curse 1
 
 {-# NOINLINE smugglerData #-}
 smugglerData :: IORef [(PId,[Card])]
@@ -254,7 +255,8 @@ smugglers = Card 0 3 "Smugglers" "..." [Hook (SetupHook setup),action a]
                  dat <- liftIO (readIORef smugglerData)
                  let rhos = concat $ maybeToList $ lookup rho dat
                  avail <- filterM inSupply =<< filterM (priceIsM (<=6)) rhos
-                 gain self discard *<# askCards self avail SelectGain (1,1)
+                 c <- askCards self avail SelectGain (1,1)
+                 gainCardsTop discard self c
 
 tactician :: Card
 tactician = Card 0 5 "Tactician" "..." [duration a]
@@ -270,10 +272,7 @@ treasureMap = Card 0 4 "Treasure Map" "..." [Action a]
                                                   "treasure map") (1,1)
                         t <- inTrash this
                         when (not (null cs) && not t) $
-                             do gain self deck *<< [gold]
-                                gain self deck *<< [gold]
-                                gain self deck *<< [gold]
-                                gain self deck *<< [gold]
+                             gainFromSupply deck self gold 4
                         trash << this:cs -- everything gets trashed
 
 {-# NOINLINE treasuryData #-}

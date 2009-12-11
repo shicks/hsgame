@@ -62,7 +62,7 @@ bureaucrat = Card 0 4 "Bureaucrat" "..." [action a]
                    revealCards opp [c] "hand"
                    deck opp *<< [c]
                  self <- getSelf
-                 try $ gain self deck *<< [silver]
+                 try $ gainFromSupply deck self silver 1
 
 cellar :: Card
 cellar = Card 0 2 "Cellar" "..." [action a]
@@ -93,7 +93,8 @@ feast = Card 0 4 "Feast" "Trash this card.  Gain a card costing up to 5"
         [oneShot a]
     where a = do self <- getSelf
                  sup <- supplyCosting (<=5)
-                 gain self discard *<# askCards self sup SelectGain (1,1)
+                 c <- askCards self sup SelectGain (1,1)
+                 gainCardsTop discard self c
 
 festival :: Card
 festival = Card 0 5 "Festival" "..." $ [action $ plusABCD 2 1 2 0]
@@ -141,7 +142,9 @@ mine = Card 0 5 "Mine" "..." [action $ try a]
                  trash << [c]
                  sup <- filter isTreasure `fmap`
                         supplyCosting (<=(price c+3))
-                 gain self hand <# askCards self sup SelectGain (1,1)
+                 cnew <- askCards self sup SelectGain (1,1)
+                 let ohand = (`SPId` "hand") -- FIXME!
+                 gainCardsTop ohand self cnew
 
 moat :: Card
 moat = Card 0 2 "Moat" "..." [action $ plusCard 2,Reaction r]
@@ -161,7 +164,8 @@ remodel = Card 0 4 "Remodel" "..." [action $ try a]
                  [c] <- askCardsHand (TrashBecause "remodel") (1,1)
                  trash << [c]
                  sup <- supplyCosting . (>=) . (2+) =<< priceM c
-                 gain self discard *<# askCards self sup SelectGain (1,1)
+                 newc <- askCards self sup SelectGain (1,1)
+                 gainCardsTop discard self newc
 
 smithy :: Card
 smithy = Card 0 4 "Smithy" "..." [action $ plusCard 3]
@@ -189,7 +193,7 @@ thief = Card 0 4 "Thief" "..." [action a]
                 discard opp *<< nts
                 [c] <- askCards self ts (TrashBecause "thief") (1,1)
                 discard opp *<< filter (/=c) ts
-                askMC self [("Steal",gain' self discard *<< [c]),
+                askMC self [("Steal",gainCardsTop discard self [c]),
                            ("Trash",trash << [c])] $ "Steal "++show c++"?"
 
 -- TR and durations - FV=Fishing Village
@@ -215,7 +219,8 @@ village = Card 0 3 "Village" "..." $ [action $ plusABCD 2 0 0 1]
 witch :: Card
 witch = Card 0 5 "Witch" "..." [action a]
     where a = do plusCard 2
-                 attackNow "witch" $ \_ o -> try $ gain o discard *<< [curse]
+                 attackNow "witch" $ \_ o ->
+                     try $ gainFromSupply discard o curse 1
 
 woodcutter :: Card
 woodcutter = Card 0 3 "Woodcutter" "..." [action $ plusABCD 0 1 2 0]
@@ -224,7 +229,8 @@ workshop :: Card
 workshop = Card 0 3 "Workshop" "..." [action a]
     where a = do self <- getSelf
                  sup <- supplyCosting (<=4)
-                 gain self discard *<# askCards self sup SelectGain (1,1)
+                 c <- askCards self sup SelectGain (1,1)
+                 gainCardsTop discard self c
 
 -- Basic cards
 

@@ -54,7 +54,7 @@ baron = Card 0 4 "Baron" "..." [action a]
                    True <- askYN self "Discard estate?"
                    discard self *<< [e]
                    plusCoin 4
-          gainEstate self = try $ gain self discard *<< [estate]
+          gainEstate self = try $ gainFromSupply discard self estate 1
 
 bridge :: Card
 bridge = Card 0 4 "Bridge" "..." [action a]
@@ -105,8 +105,9 @@ ironworks :: Card
 ironworks = Card 0 4 "Ironworks" "..." [action a]
     where a = try $ do self <- getSelf
                        sup <- supplyCosting (<=4)
+                       -- FIXME what happens if there is nothing to gain?
                        [c] <- askCards self sup SelectGain (1,1)
-                       gain self discard *<< [c]
+                       gainCardsTop discard self [c]
                        when (isAction c) $ plusAction 1
                        when (isTreasure c) $ plusCoin 1
                        when (isVictory c) $ plusCard 1
@@ -169,8 +170,8 @@ saboteur = Card 0 5 "Saboteur" "..." [action a]
                                         trash << [c]
                                         tell self $ "Trashed "++show c
                                         sup <- supplyCosting (<=(p-2))
-                                        gain opp discard *<#
-                                             askCards opp sup (q c) (0,1))
+                                        cs <- askCards opp sup (q c) (0,1)
+                                        gainCardsTop discard opp cs)
                          $ discard opp *<<< aside
           q c = GiveAway $ "Trashed "++show c++": replacement?"
 
@@ -223,14 +224,18 @@ swindler = Card 0 3 "Swindler" "..." [action a]
                    sup <- supplyCosting (==p)
                    tell opp $ "Trashed "++show c
                    let q = "Trashed "++show c++": replacement?"
-                   gain opp discard *<# -- not gain for purpose of smugglers...
-                        askCards self sup (GiveAway q) (1,1)
+                   -- FIXME: not gain for purpose of smugglers...
+                   cc <- askCards self sup (GiveAway q) (1,1)
+                   gainCardsTop discard opp cc
 
 torturer :: Card
 torturer = Card 0 5 "Torturer" "..." [action a]
     where a = do plusCard 3 -- this attack may not be parallelizable
                  attackNow "torturer" $ \_ opp -> try $ do
-                   let curs = try $ gain opp hand << [curse]
+                   let -- FIXME: this is a really hokey workaround for
+                       -- UStack business...
+                       ohand = (`SPId` "hand")
+                       curs = try $ gainFromSupply ohand opp curse 1
                        disc = forceDiscard "torturer" opp 2
                    askMC opp [("Discard 2 cards",disc),
                               ("Gain a Curse into hand",curs)]
@@ -241,7 +246,9 @@ tradingPost = Card 0 5 "Trading Post" "..." [action a]
     where a = do self <- getSelf
                  cs <- askCardsHand (TrashBecause "trading post") (2,2)
                  trash << cs
-                 when (length cs == 2) $ try $ gain self hand << [silver]
+                 let ohand = (`SPId` "hand")
+                 when (length cs == 2) $
+                      try $ gainFromSupply ohand self silver 1
 
 tribute :: Card
 tribute = Card 0 5 "Tribute" "..." [action a]
@@ -260,7 +267,8 @@ upgrade = Card 0 5 "Upgrade" "..." [action $ try a]
                  plusABCD 1 0 0 1
                  [c] <- askCardsHand (TrashBecause "upgrade") (1,1)
                  sup <- supplyCosting (==(price c+1))
-                 gain self discard *<# askCards self sup SelectGain (1,1)
+                 cnew <- askCards self sup SelectGain (1,1)
+                 gainCardsTop discard self cnew
 
 wishingWell :: Card
 wishingWell = Card 0 3 "Wishing Well" "..." [action $ try a]

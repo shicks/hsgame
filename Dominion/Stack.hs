@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
 
-module Dominion.Stack ( Deck, UStackName, IStack, printStack,
+module Dominion.Stack ( Deck, UStackName, printStack,
                         addCards, initializeStackHooks,
                         (*<<), (.<<), (<<), (*<#), (.<#), (<#),
                         (<*), (<.), (*<<<), (.<<<), (<<<), (#<), (#<#),
@@ -10,7 +10,7 @@ module Dominion.Stack ( Deck, UStackName, IStack, printStack,
                         durations, played, prevDuration, aside,
                         allSupply, supplyCards, inSupply, inTrash,
                         allCards,
-                        gain, gain', gainSilent,
+                        gainCards, buyCards, gainCardsTop, gainFromSupply,
                         revealHand, revealCards,
                         cardWhere ) where
 
@@ -94,16 +94,6 @@ instance UnorderedInputStack UStackName where
 
 get :: OutputStack s => Int -> s -> Game [Card]
 get = flip unorderedGetStack
-
-data IStack s = IStack {
-      inputProc :: [Card] -> Game [Card],
-      origStack :: s
-}
-instance OrderedInputStack s => OrderedInputStack (IStack s) where
-    addToBottom s cs = inputProc s cs >>= addToBottom (origStack s)
-    addToTop s cs = inputProc s cs >>= addToTop (origStack s)
-instance UnorderedInputStack s => UnorderedInputStack (IStack s) where
-    addToStack s cs = inputProc s cs >>= addToStack (origStack s)
 
 -- fromTop :: Stack -> Game Card
 -- toTop :: Stack -> Card -> Game ()
@@ -279,38 +269,37 @@ inSupply c = (not . null) `fmap` supplyCards c
 inTrash :: Card -> Game Bool
 inTrash c = (== stackName trash) `fmap` cardWhere c
 
--- *this is a funny distinction.  @gain@ will be used only for
--- gaining cards from the supply, while @gain'@ will be used for
--- gaining a particular instance of a card.  If a card is not
--- in the supply then @gain@ will fail.  'hookGain' is run in
--- both cases.  Note that failure means that smugglers must either
--- use 'try' or else filter out unavailable cards.
-gain :: PId -> (PId -> s) -> IStack s
-gain p s = IStack gain'' (s p)
-    where gain'' cs = do cs' <- concat `fmap` mapM checkSupply cs
-                         runGainHooks p cs'
-                         name <- withPlayer p $ gets playerName
-                         when (not $ null cs') $
-                              tellAll $ CardGain name $ map describeCard cs'
-                         return cs'
-          checkSupply c = do cs <- take 1 `fmap` supplyCards c
-                             aside << cs  -- workaround treasureMap issue
-                             return cs
+-- | this is a hook that just announces that a given player is gaining
+-- certain cards, and does whatever else need be done when said player
+-- gains those cards.  It doesn't pull them from supply or anything
+-- else, for that, use 'supplyCards'.
+gainCards :: PId -> [Card] -> Game [Card]
+gainCards _ [] = return []
+gainCards p cs = do runGainHooks p cs
+                    name <- withPlayer p $ gets playerName
+                    when (not $ null cs) $
+                         tellAll $ CardGain name $ map describeCard cs
+                    return cs
 
-gain' :: PId -> (PId -> s) -> IStack s
-gain' p s = IStack (thread gain'') (s p)
-    where gain'' cs = do runGainHooks p cs
-                         name <- withPlayer p $ gets playerName
-                         when (not $ null cs) $
-                              tellAll $ CardGain name $ map describeCard cs
+-- | This handles all hooks needed for buying the specified cards, but
+-- doesn't actually grab them from the supply---they'd better be legal
+-- cards!
+buyCards :: PId -> [Card] -> Game [Card]
+buyCards _ [] = return []
+buyCards p cs = do runBuyHooks p cs
+                   runGainHooks p cs
+                   name <- withPlayer p $ gets playerName
+                   tellAll $ CardBuy name $ map describeCard cs
+                   return cs
 
--- no announcement because we already announced Buy...
-gainSilent :: PId -> (PId -> s) -> IStack s
-gainSilent p s = IStack gain'' (s p)
-    where gain'' cs = mapM checkSupply cs >>= thread (runGainHooks p) . concat
-          checkSupply c = do cs <- take 1 `fmap` supplyCards c
-                             aside << cs
-                             return cs
+gainCardsTop :: OrderedInputStack s => (PId -> s) -> PId -> [Card] -> Game ()
+gainCardsTop out p cs = out p *<# gainCards p cs
+
+gainFromSupply :: OrderedInputStack s =>
+                  (PId -> s) -> PId -> Card -> Int -> Game ()
+gainFromSupply out p card num =
+    do c <- supplyCards card >>= (gainCards p . take num)
+       out p *<< c
 
 allCards :: PId -> Game [Card]
 allCards p = (concatMap isp . elems) `fmap` gets gameCards
@@ -322,10 +311,6 @@ cardWhere :: Card -> Game StackName
 cardWhere c = do cs <- gets gameCards
                  let (s,_,_) = cs ! cardId c
                  return s
-
-thread :: Monad m => (a -> m b) -> a -> m a
-thread f a = f a >> return a
-
 
 revealHand :: PId -> Game ()
 revealHand p = do h <- getStack $ hand p

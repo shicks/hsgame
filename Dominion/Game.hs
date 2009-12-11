@@ -116,20 +116,15 @@ turn = do self <- gets currentTurn
                                  (sum `fmap` mapM getTreasure treasure)
                         buys <- gets $ turnBuys . turnState
                         attemptBuy self buys money
-          attemptBuy self buys money = do
+          attemptBuy _ 0 _ = return ()
+          attemptBuy self buys money = do -- FXME: only allow valid responses!
                    sup <- supplyCosting (<=money)
                    tell self $ "Buy: " ++ show money ++ " coins, "
                                ++ show buys ++ " buys"
-                   cs <- askCards' self sup SelectBuys (0,buys)
+                   cs <- askCards' self sup SelectBuys (0,1)
                    totalCost <- sum `fmap` mapM priceM cs
-                   if totalCost <= money then do name <- withPlayer self $
-                                                         gets playerName
-                                                 gainSilent self discard *<< cs
-                                                 runBuyHooks self cs
-                                                 when (not $ null cs) $
-                                                      tellAll $ CardBuy name $
-                                                         map describeCard cs
-                                         else attemptBuy self buys money
+                   discard self *<# buyCards self cs
+                   attemptBuy self (buys-1) (money - totalCost)
           runDuration self =
               do prevDuration <<< durations self
                  withPlayer self (gets durationEffects) >>= sequence_

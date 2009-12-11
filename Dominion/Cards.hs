@@ -64,8 +64,7 @@ blackMarket = Card 0 3 "Black Market" "..." [Hook (SetupHook setup), action a]
                                                   plusCoin treasure
                        -- we might try to make these more atomic...?
                        plusCoin (-cost)
-                       runBuyHooks self [c]
-                       gain' self discard *<< [c]
+                       discard self *<# buyCards self [c]
                        return [c]
                  buy <- catchError f (\_ -> return [])
                  -- allow reordering of submerged cards?
