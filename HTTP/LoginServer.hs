@@ -33,9 +33,9 @@ instance Show Agent where showsPrec _ (Agent s) = showString s
 
 type Hostname = String
 data LoginMessage = SendMessage Agent String           -- script
-                  | NewUser Agent Hostname (MVar Bool) -- hostname
+                  | NewUser Agent Hostname (Bool -> IO ()) -- hostname
                   | Poll Agent Hostname (MVar (Maybe Response))
-                  | Verify Agent Hostname (MVar Bool)
+                  | Verify Agent Hostname (Bool -> IO ())
                            -- We could replace Verify with NewUser, but
                            -- this gives some added safety
                         -- -- | GetAgents (MVar [agent]) ...?
@@ -46,22 +46,22 @@ loginThread :: Input LoginMessage
             -> IO ()
 loginThread inp ag = do msg <- readInput inp
                         case msg of
-                          NewUser a host mv ->
+                          NewUser a host ret ->
                               case lookup a ag of
                                 Just (host',_,_)
-                                    | host'==host -> do putMVar mv True
+                                    | host'==host -> do ret True
                                                         loginThread inp ag
-                                    | otherwise   -> do putMVar mv False
+                                    | otherwise   -> do ret False
                                                         loginThread inp ag
                                 Nothing -> do (i,o) <- pipe
-                                              putMVar mv True
+                                              ret True
                                               loginThread inp $
                                                   (a,(host,i,o)):ag
-                          Verify a host mv -> do
+                          Verify a host ret -> do
                               case lookup a ag of
                                 Just (host',_,_)
-                                    | host'==host -> putMVar mv True
-                                _ -> putMVar mv False
+                                    | host'==host -> ret True
+                                _ -> ret False
                               loginThread inp ag
                           SendMessage a s -> do
                               putStrLn $ "SendMessage "++show a++" "++show s
@@ -115,7 +115,7 @@ loginServer outp srv1 srv2 req =
                   case paths uri of
                     ["login"] ->
                         do msuc <- newEmptyMVar
-                           writeOutput outp $ NewUser u host msuc
+                           writeOutput outp $ NewUser u host (putMVar msuc)
                            suc <- takeMVar msuc
                            if suc then succR q
                                   else failR q
@@ -124,7 +124,7 @@ loginServer outp srv1 srv2 req =
                            writeOutput outp $ Poll u host rsp
                            takeMVar rsp >>= maybe (relogR q) return
                     ps -> do mv <- newEmptyMVar
-                             writeOutput outp $ Verify u host mv
+                             writeOutput outp $ Verify u host (putMVar mv)
                              ver <- takeMVar mv
                              if ver then srv2 u ps q
                                     else relogR q
