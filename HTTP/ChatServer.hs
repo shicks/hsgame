@@ -51,34 +51,35 @@ chatThread inp outp ags =
 
 -- The javascript client can tell US how it wants us to respond, i.e.
 -- where to store the answer...
-chatHandler :: (Agent -> String -> IO ()) -> IO Handler
-chatHandler sendmess = return $ Handler [] handler
+chatHandler :: String -> (Agent -> String -> IO ()) -> IO Handler
+chatHandler area sendmess = return $ Handler [] handler
     where handler a ps q =
             Message $ \st ->
             do putStrLn $ "chatHandler <o> "++show a++" "++show ps++" " ++show q
-               chatHandler' sendmess st a ps q
+               chatHandler' area sendmess st a ps q
 
-chatHandler' :: (Agent -> String -> IO ())
+chatHandler' :: String -> (Agent -> String -> IO ())
              -> [(Agent,String -> String)]
              -> Agent -> [String] -> [(String,String)]
              -> IO ([(Agent,String -> String)], Response)
-chatHandler' sendmess ags a ["join"] q =
+chatHandler' area sendmess ags a ["join"] q =
     do let ags' = (a,f) : filter ((/= a) . fst) ags
        say sendmess ags' ("Welcome "++show a)
        r <- blank200
        return (ags', r)
-    where f s = jsPrintf (fromMaybe "$.chat.say(%s+\"\\n\")" $ lookup "q" q) [s]
-chatHandler' sendmess ags a ["leave"] _ =
+    where f s = jsPrintf (fromMaybe js $ lookup "q" q) [s]
+          js = "$."++area++".say(%s+\"\\n\")"
+chatHandler' _ sendmess ags a ["leave"] _ =
     do let ags' = filter ((/= a) . fst) ags
        say sendmess ags' ("Goodbye "++show a)
        r <- blank200
        return (ags', r)
-chatHandler' sendmess ags a ["say"] q =
+chatHandler' _ sendmess ags a ["say"] q =
     do let msg = fromMaybe "(noinput)" $ lookup "q" q
        say sendmess ags (show a++": "++msg)
        r <- blank200
        return (ags, r)
-chatHandler' _ ags _ _ _ =
+chatHandler' _ _ ags _ _ _ =
     do putStrLn "chatHandler _ _ _ _"
        r <- error404
        return (ags, r)

@@ -12,6 +12,13 @@
 <input id="say" type="submit" value="say"/>
 </div>
 
+<div id="sillyarea" style="display:none">
+<textarea id="silly" cols="80" rows="10" readonly></textarea>
+<br/>
+<input id="sillyinput" type="text" size="60"/>
+<input id="sillysay" type="submit" value="silly"/>
+</div>
+
 <div id="loginarea">
 Your name, please:
 <input id="name" type="text" size="20"/>
@@ -36,8 +43,10 @@ Your name, please:
       $.user = $("#name").val();
       $("#loginarea").hide();
       $("#chatarea").show();
+      $("#sillyarea").show();
       poll = pollFunction;
       $.ajax({url:"/chat/join",data:{u:$.user},dataType:"script"});
+      $.ajax({url:"/silly/join",data:{u:$.user},dataType:"script"});
       poll();
     },
     fail: function(){
@@ -47,6 +56,7 @@ Your name, please:
       $.user = "";            // undefined?
       $("#loginarea").show();
       $("#chatarea").hide();
+      $("#sillyarea").hide();
       poll = function(){};    // can we stop polling?
       $.ajax({url:"/login",data:{u:$.user},dataType:"script"});
     }
@@ -55,6 +65,12 @@ Your name, please:
   $.chat = {
     say: function(msg){
       $("#chat").append(msg).scrollTop(1e10);
+    }
+  };
+
+  $.silly = {
+    say: function(msg){
+      $("#silly").append(msg).scrollTop(1e10);
     }
   };
 
@@ -75,7 +91,15 @@ Your name, please:
     $.ajax({url:"/chat/say",data:{u:$.user,q:inp.attr("value")}});
     inp.val("");
   }
+  function silly(){
+    var inp = $("#sillyinput");
+    var txt = $("#silly");
+    $.ajax({url:"/silly/say",data:{u:$.user,q:inp.attr("value")}});
+    inp.val("");
+  }
   $("#say").bind("click",function(e){say()});
+  $("#sillysay").bind("click",function(e){silly()});
   $("#input").bind("keypress",function(e){if(e.which==13)say();});
+  $("#sillyinput").bind("keypress",function(e){if(e.which==13)silly();});
 
 });</script>
