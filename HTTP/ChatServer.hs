@@ -1,9 +1,10 @@
 {-# LANGUAGE PatternGuards #-}
 
-module HTTP.ChatServer ( chatServer, chatThread ) where
+module HTTP.ChatServer ( chatServer, chatThread, chatHandler ) where
 
 import HTTP.Response ( Response, jsPrintf, blank200, error404 )
 import HTTP.LoginServer ( LoginMessage(..), Agent )
+import HTTP.Handlers ( Handler(..), Message(..) )
 
 import TCP.Chan ( Input, Output, writeOutput, readInput )
 import Data.Maybe ( fromMaybe )
@@ -46,3 +47,44 @@ chatThread inp outp ags =
                      forM_ ags $ \(a,f) ->
                          writeOutput outp $ SendMessage a $ f s
                      chatThread inp outp ags
+
+
+-- The javascript client can tell US how it wants us to respond, i.e.
+-- where to store the answer...
+chatHandler :: (Agent -> String -> IO ()) -> IO Handler
+chatHandler sendmess = return $ Handler [] handler
+    where handler a ps q =
+            Message $ \st ->
+            do putStrLn $ "chatHandler <o> "++show a++" "++show ps++" " ++show q
+               chatHandler' sendmess st a ps q
+
+chatHandler' :: (Agent -> String -> IO ())
+             -> [(Agent,String -> String)]
+             -> Agent -> [String] -> [(String,String)]
+             -> IO ([(Agent,String -> String)], Response)
+chatHandler' sendmess ags a ["join"] q =
+    do let ags' = (a,f) : filter ((/= a) . fst) ags
+       say sendmess ags' ("Welcome "++show a)
+       r <- blank200
+       return (ags', r)
+    where f s = jsPrintf (fromMaybe "$.chat.say(%s+\"\\n\")" $ lookup "q" q) [s]
+chatHandler' sendmess ags a ["leave"] _ =
+    do let ags' = filter ((/= a) . fst) ags
+       say sendmess ags' ("Goodbye "++show a)
+       r <- blank200
+       return (ags', r)
+chatHandler' sendmess ags a ["say"] q =
+    do let msg = fromMaybe "(noinput)" $ lookup "q" q
+       say sendmess ags (show a++": "++msg)
+       r <- blank200
+       return (ags, r)
+chatHandler' _ ags _ _ _ =
+    do putStrLn "chatHandler _ _ _ _"
+       r <- error404
+       return (ags, r)
+
+say :: (Agent -> String -> IO ()) -> [(Agent,String -> String)]
+    -> String -> IO ()
+say sendmess ags s =
+    forM_ ags $ \(a,f) -> sendmess a (f s)
+
