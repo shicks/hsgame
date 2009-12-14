@@ -37,18 +37,12 @@ chatServer' _ _ _ _ = putStrLn "chatServer _ _ _ _" >> error404
 
 chatThread :: Input Chat -> Output LoginMessage
            -> [(Agent,String -> String)] -> IO ()
-chatThread inp outp ags = do msg <- readInput inp
-                             case msg of
-                               Join a f -> chatThread inp outp $ replace a f ags
-                               Leave a  -> chatThread inp outp $ remove a ags
-                               Say s -> do putStrLn $"Say "++show s
-                                           forM_ ags $ \(a,f) ->
-                                               writeOutput outp $
-                                               SendMessage a $ f s
-                                           chatThread inp outp ags
-    where replace a f [] = [(a,f)]
-          replace a f ((a',f'):as) | a==a'     = (a,f):as
-                                   | otherwise = (a',f'):replace a f as
-          remove _ [] = []
-          remove a ((a',f'):as) | a==a'     = as
-                                | otherwise = (a',f'):remove a as
+chatThread inp outp ags =
+    do msg <- readInput inp
+       case msg of
+         Join a f -> chatThread inp outp $ (a,f) : filter ((/= a) . fst) ags
+         Leave a  -> chatThread inp outp $ filter ((/= a) . fst) ags
+         Say s -> do putStrLn $"Say "++show s
+                     forM_ ags $ \(a,f) ->
+                         writeOutput outp $ SendMessage a $ f s
+                     chatThread inp outp ags
