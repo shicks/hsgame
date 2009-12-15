@@ -7,8 +7,7 @@ import HTTP.Request ( Request(..), urlDecode )
 import HTTP.Response ( Response, jsResponse )
 
 import Control.Concurrent ( forkIO, threadDelay )
-import TCP.Chan ( Input, Output, pipe, isEmptyInput,
-                  writeOutput, readInput )
+import TCP.Chan ( Input, Output, pipe, writeOutput, readInput )
 import Control.Concurrent.MVar ( MVar, newEmptyMVar, putMVar, takeMVar )
 import Data.Maybe ( fromMaybe )
 import Data.List ( groupBy )
@@ -73,20 +72,14 @@ loginThread inp ag = do msg <- readInput inp
                               do forkIO $ do
                                    case lookup a ag of
                                      Just (host',i,_)
-                                       | host'==host -> emptyChan i mv
+                                       | host'==host ->
+                                           do putStrLn "Waiting for input..."
+                                              r <- readInput i >>= jsResponse
+                                              putMVar mv $ Just r
                                      _ -> do -- prevent accidental DOS
                                              threadDelay 5000000
                                              putMVar mv Nothing
                                  loginThread inp ag
-    where emptyChan c mv = do putStrLn "Waiting for input on chan"
-                              line <- readInput c
-                              putStrLn $ "Got one line: "++line
-                              rest <- ec' c
-                              putMVar mv . Just =<< jsResponse
-                                                    (unlines $ (line:rest))
-          ec' c = do e <- isEmptyInput c
-                     if e then return [] else do l <- readInput c
-                                                 (l:) `fmap` ec' c
 
 -- type AuthServer = (Agent -> [String] -> [(String,String)] -> IO Response)
 
