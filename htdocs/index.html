@@ -17,6 +17,7 @@
 <br/>
 <input id="sillyinput" type="text" size="60"/>
 <input id="sillysay" type="submit" value="silly"/>
+<input id="startgame" type="submit" value="Start game!"/>
 </div>
 
 <div id="loginarea">
@@ -97,8 +98,12 @@ Your name, please:
     $.ajax({url:"/silly/say",data:{u:$.user,q:inp.attr("value")}});
     inp.val("");
   }
+  function startgame(){
+    $.ajax({url:"/silly/start",data:{u:$.user}});
+  }
   $("#say").bind("click",function(e){say()});
   $("#sillysay").bind("click",function(e){silly()});
+  $("#startgame").bind("click",function(e){startgame()});
   $("#input").bind("keypress",function(e){if(e.which==13)say();});
   $("#sillyinput").bind("keypress",function(e){if(e.which==13)silly();});
 
