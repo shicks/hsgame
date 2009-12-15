@@ -3,8 +3,8 @@ module Main where
 import HTTP.Server ( httpServer, pure )
 import HTTP.FileServer ( fileServer )
 import HTTP.ChatServer ( chatHandler )
-import HTTP.LoginServer ( LoginMessage(SendMessage),
-                          loginServer, loginThread, dirServer )
+import HTTP.LoginServer ( LoginMessage(SendMessage), loginServer, loginThread )
+import HTTP.DirHandler ( dirServer )
 import HTTP.Handlers ( useHandler )
 -- import Dominion.Server ( dominionServer, dominionThread )
 import TCP.Chan ( pipe, writeOutput )

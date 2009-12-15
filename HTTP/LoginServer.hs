@@ -1,10 +1,10 @@
-module HTTP.LoginServer ( loginServer, loginThread, dirServer,
+module HTTP.LoginServer ( loginServer, loginThread,
                           LoginMessage(SendMessage),
                           Agent(..)
                         ) where
 
 import HTTP.Request ( Request(..), urlDecode )
-import HTTP.Response ( Response, jsResponse, error404 )
+import HTTP.Response ( Response, jsResponse )
 
 import Control.Concurrent ( forkIO, threadDelay )
 import TCP.Chan ( Input, Output, pipe, isEmptyInput,
@@ -89,17 +89,6 @@ loginThread inp ag = do msg <- readInput inp
                                                  (l:) `fmap` ec' c
 
 -- type AuthServer = (Agent -> [String] -> [(String,String)] -> IO Response)
-
-dirServer :: [(Maybe String,        -- "directory name"
-               (Agent -> [String] -> [(String,String)] -> IO Response))]
-             -> Agent -> [String] -> [(String,String)] -> IO Response
-dirServer spec u [] q = case lookup Nothing spec of
-                          Nothing  -> error404
-                          Just srv -> srv u [] q
-dirServer spec u (p:ps) q = do putStrLn $ "dirServer: (p:ps)="++show (p:ps)
-                               case lookup (Just p) spec of
-                                 Nothing  -> putStrLn "404 error" >> error404
-                                 Just srv -> putStrLn "found" >> srv u ps q
 
 loginServer :: Output LoginMessage
             -> (Request -> IO Response)
