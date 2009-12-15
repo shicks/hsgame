@@ -2,9 +2,9 @@ module Main where
 
 import HTTP.Server ( httpServer, pure )
 import HTTP.FileServer ( fileServer )
-import HTTP.ChatServer ( chatHandler )
 import HTTP.LoginServer ( LoginMessage(SendMessage), loginServer, loginThread )
 import HTTP.DirHandler ( dirHandler )
+import HTTP.ChatHandler ( chatHandler )
 
 import TCP.Chan ( pipe, writeOutput )
 import Control.Concurrent ( forkIO )
