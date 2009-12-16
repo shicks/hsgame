@@ -2,10 +2,9 @@
 
 module HTTP.Dominion ( dominionHandler, MessageToGame(..) ) where
 
-import Dominion ( Card, MessageToClient(Question, Info), QId, Answer,
+import Dominion ( MessageToClient(Question, Info), QId, Answer,
                   ResponseFromClient(ResponseFromClient),
-                  play, evalGame, pretty,
-                  shuffleIO, allRecommended, allDecks )
+                  play, evalGame, pretty, pickDecks )
 import qualified Dominion ( start )
 import TCP.Chan ( Output, pipe, readInput, writeOutput )
 
@@ -13,7 +12,6 @@ import HTTP.Response ( Response, jsPrintf, blank200, error404 )
 import HTTP.LoginServer ( Agent )
 import HTTP.Handlers ( Handler(..), Message(..) )
 
-import System.Random ( randomRIO )
 import Data.Maybe ( fromMaybe )
 import Control.Monad ( forM_, forever )
 import Control.Concurrent ( forkIO )
@@ -122,13 +120,3 @@ sayto sendmess ags a s =
 say :: (Agent -> String -> IO ()) -> DomState -> String -> IO ()
 say sendmess ags s =
     forM_ (clients ags) $ \(a,f) -> sendmess a (f s)
-
-pickDecks :: [Card] -> IO [Card]
-pickDecks cs = do let sets = filter ((==10).length.snd) allRecommended
-                  r <- randomRIO (1,100)
-                  decks <- if r > (10 :: Int) || not (null cs)
-                           then (take 10 . (cs++)) `fmap` shuffleIO allDecks
-                           else do (sn,d) <- head `fmap` shuffleIO sets
-                                   putStrLn ("Using set "++sn)
-                                   return d
-                  return decks

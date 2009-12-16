@@ -14,8 +14,6 @@ import Control.Monad ( forever, replicateM )
 import Control.Monad.State ( execStateT,
                              StateT, runStateT, put, get, modify, liftIO )
 import Data.Char ( toLower, isSpace )
-import Data.List ( sortBy )
-import Data.Ord ( comparing )
 import System.IO ( hFlush, stdout )
 import System.Environment ( getArgs )
 import System.Random ( randomRIO )
@@ -271,16 +269,6 @@ mainArgs cs as
           lookupBy _ _ [] = Nothing
           lookupBy f s (x:xs) | lc (f x) == lc s = Just x
                               | otherwise        = lookupBy f s xs
-
-pickDecks :: [Card] -> IO [Card]
-pickDecks cs = do let sets = filter ((==10).length.snd) allRecommended
-                  r <- randomRIO (1,100)
-                  decks <- if r > (10 :: Int) || not (null cs)
-                           then (take 10 . (cs++)) `fmap` shuffleIO allDecks
-                           else do (sn,d) <- head `fmap` shuffleIO sets
-                                   putStrLn ("Using set "++sn)
-                                   return d
-                  return $ sortBy (comparing cardPrice) decks
 
 twoPlayer :: [Card] -> IO ()
 twoPlayer cs = do
