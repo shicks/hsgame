@@ -10,11 +10,11 @@ import NamePicker ( simpleNamedClient, pickNames )
 
 import Control.Concurrent ( forkIO )
 import TCP.Chan ( Input, Output, readInput, writeOutput, pipe )
-import Control.Monad ( forever, replicateM, forM_ )
+import Control.Monad ( forever, replicateM )
 import Control.Monad.State ( execStateT,
                              StateT, runStateT, put, get, modify, liftIO )
 import Data.Char ( toLower, isSpace )
-import Data.List ( sortBy, intercalate )
+import Data.List ( sortBy )
 import Data.Ord ( comparing )
 import System.IO ( hFlush, stdout )
 import System.Environment ( getArgs )
@@ -63,30 +63,6 @@ stateToPlayer ss ri aq s0 = PlayerFunctions
     where this = stateToPlayer ss ri aq
           (***) f g (a,b) = (f a,g b)
 
-class Pretty p where
-    pretty :: p -> String
-
-instance Pretty CardDescription where
-    pretty c = cname c++" ("++show (cprice c)++")" --  ["++ show (cid c)++"]"
-instance Pretty [CardDescription] where
-    pretty cs = intercalate ", " $ map pretty cs
-instance Pretty InfoMessage where
-    pretty (InfoMessage s) | 1==1 = s -- prevent overlapping match warning
-    pretty (GameOver s) = s
-    pretty (CardPlay p cs) = p ++ " played " ++ pretty cs
-    pretty (CardDraw p (Left n)) = p ++ " drew " ++ show n ++ " cards"
-    pretty (CardDraw _ (Right cs)) = "You drew " ++ pretty cs
-    pretty (CardDiscard p cs) = p ++ " discarded " ++ pretty cs
-    pretty (CardTrash p cs) = p ++ " trashed " ++ pretty cs
-    pretty (CardReveal p cs f) = p ++ " revealed " ++ pretty cs ++ " from " ++ f
-    pretty (CardBuy p cs) = p ++ " bought " ++ pretty cs
-    pretty (CardGain p cs) = p ++ " gained " ++ pretty cs
-    pretty (Reshuffled p) = p ++ " reshuffled"
-    pretty s = show s -- prevent crashing when we add message types
-instance Pretty Answer where
-    pretty (Choose s) = s
-    pretty (PickCard c) = pretty c
-
 stdioClient :: String -> Input MessageToClient -> Output ResponseFromClient -> IO ()
 stdioClient name = client (stateToPlayer status info answer "") name
     where status _ = return () -- status = liftIO . hPutStrLn stderr
@@ -96,11 +72,7 @@ stdioClient name = client (stateToPlayer status info answer "") name
           answer m as (a0,a1) =
               do get >>= liftIO . putStrLn
                  put ""
-                 liftIO $ putStrLn $ "Question: " ++ show m
-                 liftIO $ putStrLn "Options:"
-                 forM_ (zip [1..] as) $
-                   \(n,a) -> liftIO $ putStrLn $ "  " ++ show n ++ ": "
-                                                 ++ pretty a
+                 liftIO $ putStrLn $ pretty $ Question 0 m as (a0,a1)
                  ans <- untilJust $ do
                    liftIO $ putStr $ "Enter " ++ showRange a0 a1
                               ++ " separated by spaces: "

@@ -16,7 +16,7 @@
 <textarea id="silly" cols="80" rows="10" readonly></textarea>
 <br/>
 <input id="sillyinput" type="text" size="60"/>
-<input id="sillysay" type="submit" value="silly"/>
+<input id="sillyanswer" type="submit" value="Answer"/>
 <input id="startgame" type="submit" value="Start game!"/>
 </div>
 
@@ -98,11 +98,17 @@ Your name, please:
     $.ajax({url:"/silly/say",data:{u:$.user,q:inp.attr("value")}});
     inp.val("");
   }
+  function answer(){
+    var inp = $("#sillyinput");
+    var txt = $("#silly");
+    $.ajax({url:"/silly/answer",data:{u:$.user,q:inp.attr("value")}});
+    inp.val("");
+  }
   function startgame(){
     $.ajax({url:"/silly/start",data:{u:$.user}});
   }
   $("#say").bind("click",function(e){say()});
-  $("#sillysay").bind("click",function(e){silly()});
+  $("#sillyanswer").bind("click",function(e){answer()});
   $("#startgame").bind("click",function(e){startgame()});
   $("#input").bind("keypress",function(e){if(e.which==13)say();});
   $("#sillyinput").bind("keypress",function(e){if(e.which==13)silly();});
