@@ -28,7 +28,7 @@ chatHandler' area sendmess ags a ["join"] q =
        r <- blank200
        return (ags', r)
     where f s = jsPrintf (fromMaybe js $ lookup "q" q) [s]
-          js = "$."++area++".say(%s+\"\\n\")"
+          js = "$."++area++".say(%s)"
 chatHandler' _ sendmess ags a ["leave"] _ =
     do let ags' = filter ((/= a) . fst) ags
        say sendmess ags' ("Goodbye "++show a)

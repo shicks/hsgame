@@ -79,7 +79,7 @@ handler area sendmess ds a ["join"] q =
        r <- blank200
        return (ds', r)
     where f s = jsPrintf (fromMaybe js $ lookup "q" q) [s]
-          js = "$."++area++".say(%s+\"\\n\")"
+          js = "$."++area++".say(%s)"
 handler _ sendmess ds a ["leave"] _ =
     do let cl' = filter ((/= a) . fst) $ clients ds
            ds' = ds { clients = cl' }
