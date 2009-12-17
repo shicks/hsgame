@@ -5,112 +5,111 @@
 </head>
 <body id="body-root" style="text-align:center">
 
-<div id="chatarea" style="display:none">
-<textarea id="chat" cols="80" rows="10" readonly></textarea>
-<br/>
-<input id="input" type="text" size="60"/>
-<input id="say" type="submit" value="say"/>
+<div id="logged" style="display:none">
+  <div id="chatarea"></div>
+  <div id="sillyarea"></div>
 </div>
 
-<div id="sillyarea" style="display:none">
-<textarea id="silly" cols="80" rows="10" readonly></textarea>
-<br/>
-<input id="sillyinput" type="text" size="60"/>
-<input id="sillyanswer" type="submit" value="Answer"/>
-<input id="startgame" type="submit" value="Start game!"/>
-</div>
-
-<div id="loginarea">
-Your name, please:
-<input id="name" type="text" size="20"/>
-<input id="login" type="submit" value="login"/>
-</div>
-<div id="test"></div>
+<div id="loginarea"></div>
 
 <script>$(function(){
 
-  var pollFunction = function(){
-    $.ajax({
-      url: "/poll",
-      data: {u:$.user},
-      complete: poll,
-      dataType: "script"
-    });
+  function sendMessage(to,data) {
+    data=data?data:{}; // default argument...?
+    data.u=$.user;
+    $.ajax({url:to,data:data,dataType:"script"});
   }
-  var poll = pollFunction;
 
-  $.login = {
-    success: function(){
-      $.user = $("#name").val();
-      $("#loginarea").hide();
-      $("#chatarea").show();
-      $("#sillyarea").show();
-      poll = pollFunction;
-      $.ajax({url:"/chat/join",data:{u:$.user},dataType:"script"});
-      $.ajax({url:"/silly/join",data:{u:$.user},dataType:"script"});
-      poll();
-    },
-    fail: function(){
-      alert("Username in use.");
-    },
-    relog: function(){
-      $.user = "";            // undefined?
-      $("#loginarea").show();
-      $("#chatarea").hide();
-      $("#sillyarea").hide();
-      poll = function(){};    // can we stop polling?
-      $.ajax({url:"/login",data:{u:$.user},dataType:"script"});
+  /*
+  The basic idea is to write server (haskell) and javascript components
+  that work together.  We want to restrict the interface to a single
+  layer.  The javascript will have a single object, returned by a
+  (library) factory function.  This object will be told the base address
+  on the server that it is to talk to, and will register itself with
+  the server by sending the name of a global variable it can be reached
+  at.  It will also implement an interface for the server to use in its
+  callbacks.
+  */
+
+  function chatRoom(room,txt) { // (erased unneeded params input,send)
+    return{
+    // serverside interface: say(msg)
+      say: function(msg){txt.append(msg+"\n").scrollTop(1e10)},
+    // register function - we don't know name yet
+      register: function(name){sendMessage(room+"/register",{q:name})}
     }
-  };
+  }
 
-  $.chat = {
-    say: function(msg){
-      $("#chat").append(msg).scrollTop(1e10);
-    }
-  };
+  function appendChatRoom(room,div) {
+    var txt=$("<textarea cols='80' rows='10' readonly/>");
+    var input=$("<input type='text' size='60'/>");
+    var send=$("<input type='submit' value='say'/>");
+    var say=function(){sendMessage(room+"/say",{q:input.val()});input.val("")};
+    send.bind("click",function(e){say()});
+    input.bind("keypress",function(e){if(e.which==13)say()});
+    with(div){append(txt);append("<br/>");append(input);append(send)};
+    return chatRoom(room,txt);
+  }
 
-  $.silly = {
-    say: function(msg){
-      $("#silly").append(msg).scrollTop(1e10);
-    }
-  };
+  function appendDominionGame(room,div) {
+    var txt=$("<textarea cols='80' rows='10' readonly/>");
+    var input=$("<input type='text' size='60'/>");
+    var answer=$("<input type='submit' value='Answer'/>");
+    var start=$("<input type='submit' value='Start game!'/>");
+    start.bind("click",function(e){sendMessage(room+"/start",{})});
+    var ans=function(){sendMessage(room+"/answer",{q:input.val()});
+                       input.val("")};
+    var say=function(){sendMessage(room+"/say",{q:input.val()});
+                       input.val("")};
+    answer.bind("click",function(e){ans()});
+    input.bind("keypress",function(e){if(e.which==13)ans()});
+    with(div){append(txt);append("<br/>");
+              append(input);append(answer);append(start)};
+    return chatRoom(room,txt);
+  }
 
-  function login(){
-    var name = $("#name").val();
-    $("#loginarea").hide();
-    $.ajax({
-      url: "/login",
-      data: {u:name},
-      dataType: "script"});
-  }
-  $("#login").bind("click",function(e){login()});
-  $("#name").bind("keypress",function(e){if(e.which==13)login();});
+  /*
+  Here's the code for the login area...
+  */
 
-  function say(){
-    var inp = $("#input");
-    var txt = $("#chat");
-    $.ajax({url:"/chat/say",data:{u:$.user,q:inp.attr("value")}});
-    inp.val("");
+  function loginArea(onSuccess,unlogged,logged) {
+    // build up the div
+    var name=$("<input type='text' size='20'/>");
+    var login=$("<input type='submit' value='login'/>");
+    var log=function(){$.ajax({url:"/login",data:{u:name.val()},
+                               dataType:"script"})};
+    login.bind("click",function(e){log()});
+    name.bind("keypress",function(e){if(e.which==13)log();});
+    with(unlogged){append("Your name, please: ");append(name);append(login)};
+    // register the functions
+    var pollFunction=function(){
+      $.ajax({url:"/poll",data:{u:$.user},complete:$.poll,dataType:"script"});
+    };
+    $.login={
+      success: function(){
+        $.user = name.val();
+        unlogged.hide();
+        logged.show();
+        $.poll = pollFunction;
+        onSuccess();
+        $.poll();
+      },
+      fail: function(){alert("Username in use.")},
+      relog: function(){
+        $.user = "";            // undefined?
+        unlogged.show();
+        logged.hide();
+        $.poll = function(){};    // can we stop polling?
+        sendMessage("/login",{});
+      }
+    };
   }
-  function silly(){
-    var inp = $("#sillyinput");
-    var txt = $("#silly");
-    $.ajax({url:"/silly/say",data:{u:$.user,q:inp.attr("value")}});
-    inp.val("");
-  }
-  function answer(){
-    var inp = $("#sillyinput");
-    var txt = $("#silly");
-    $.ajax({url:"/silly/answer",data:{u:$.user,q:inp.attr("value")}});
-    inp.val("");
-  }
-  function startgame(){
-    $.ajax({url:"/silly/start",data:{u:$.user}});
-  }
-  $("#say").bind("click",function(e){say()});
-  $("#sillyanswer").bind("click",function(e){answer()});
-  $("#startgame").bind("click",function(e){startgame()});
-  $("#input").bind("keypress",function(e){if(e.which==13)say();});
-  $("#sillyinput").bind("keypress",function(e){if(e.which==13)silly();});
+
+  $.chat = appendChatRoom("/chat",$("#chatarea")); // .register("$.chat");
+  $.silly = appendDominionGame("/silly",$("#sillyarea"));
+  loginArea(
+    function(){sendMessage("/chat/join",{});sendMessage("/silly/join",{})},
+    $("#loginarea"),$("#logged")
+  );
 
 });</script>

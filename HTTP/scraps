@@ -1,0 +1,313 @@
+
+-- Here's an interesting approach
+
+-- The whole idea is that (a) everything interesting we do involves
+-- a thread with an InputChan and a server with an OutputChan.  Also,
+-- except for the loginServer, everything also involves a [(Agent,String)]
+-- to keep track of how we're communicating with the client.
+
+-- So, let's formalize this into a monad for the thread, since that's
+-- where most of the interesting stuff happens; we can also formalize
+-- the server into a reader monad over the OutputChan.  Thus,
+--   data AgentThreadedServer s t = AgentThreadedServer {
+--          agentThread :: AgentThread s t ()
+--          agentServer ::  Response
+
+newtype AgentThread s a = AgentThread {
+      runAgentThread :: Output LoginMessage
+                     -> ([(Agent,String)],s)
+                     -> IO ([(Agent,String)],s,a)
+    }
+
+data AgentMessage t = Reg (Agent,String) | Unreg Agent | Fwd t
+
+newtype AgentServer t a = AgentServer {
+      runAgentServer :: Output (AgentMessage t)
+                     -> Agent -> [String] -> [(String,String)] -> IO a
+    }
+
+instance Monad (AgentServer t) where
+    return a = AgentServer $ \_ _ _ _ -> return a
+    (AgentServer a) >>= f = AgentServer $ \o from addr query) ->
+                            do a' <- a o from addr query
+                               runAgentServer (f a') o from addr query
+
+
+chatThread :: Chat -> AgentThread [Agent] ()
+chatThread 
+
+
+handle :: t -> AgentServer t ()
+handle t = AgentServer $ \o _ _ _ -> writeOutput o $ Fwd t
+
+newtype RegistrationServer = RegistrationServer {
+      regSrv :: Output LoginMessage -> IO (Agent -> [String]
+                                           -> [(String,String)]
+                                           -> IO Response) }
+
+success :: AgentServer t Response
+success = AgentServer $ \_ _ _ q -> fromMaybe blank200 $ jsResponse `fmap`
+                                                         lookup "s" q
+failure = AgentServer $ \_ _ _ q -> fromMaybe blank200 $ jsResponse `fmap`
+                                                         lookup "f" q
+
+type ChanType s = AgentThread s ()
+tellThread :: AgentThread s () -> AgentServer (ChanType s) ()
+tellThread f = handle f
+
+askThread :: AgentThread s a -> AgentServer (ChanType s) a
+askThread f = do m <- liftIO $ newEmptyMVar
+                 handle $ f >>= liftIO (putMVar m)
+                 liftIO $ takeMVar m
+
+-- it seems like we can probably build the thread into here by
+-- changing the type t to something else...
+
+-- Indeed...  Now we're back to a single function again!
+-- The threads are now all identical, so we can fork them
+-- automatically, taking only a single function again...
+
+-- Question - what do we do if we want to talk to somebody who isn't
+-- registered?  Also, it seems like registration is part and parcel
+-- with sendMessage, but that's taken care of by the login server...
+-- It seems like failure is a reasonable option here...  Maybe we
+-- can even make the monad an Error monad and then make the
+-- default failure mode (unless the javascript supplies an exception
+-- handler) be to alert the error...?  That would give nice debugging!
+--   - But we still have the question of how to best keep track of
+--     the registered javascript respondants/callbacks.  And if one
+--     were to disappear, it would be nice to also have a way to
+--     catch that, so that we don't just silently die.
+--      - so the jsResponse should maybe wrap things into an
+--        exception handler?
+--   - LoginServer keeps track of logins and polling.  We should
+--     also keep track of disconnects at some point.  When we register
+--     a service, we need to keep that information LOCAL somewhere...
+--     But it would be nice not to duplicate everything!  One login,
+--     many services.  i.e.
+--       /login?u=kupopo&q=$
+--          => LoginThread : ag -> ("kupopo","$",<chans>):ag
+--       /chat/register?u=kupopo&q=chat
+--          => ChatThread : ag -> ("kupopo","chat"):ag
+--       /dominion/register?u=kupopo
+--
+--   - It seems like a hierarchical structure makes the most sense, since
+--     we certainly have something like that already.  dirServer would work
+--     well to marshall the objects, but we'd always be going deeper, so
+--     that $.success, $.failure, $.relog would be required at the $ level,
+--     and then $.chat would contain $.chat.register, $.chat.say, ...
+--   - Now sendMessage should take an address and params.
+
+
+-- Alternately....
+-- We could make the server part dumb, taking just an Output Message
+-- where
+--   data Message = Message { from :: Agent, path :: [String],
+--                            data :: [(String,String)] }
+-- Then the router is nice and simple, and we can write the thread part
+-- with a single specialized state(/error) monad.
+--   - which would be easier for spontaneously spawning new servers/threads?
+--   -> probably the dumb thread model...?
+
+-- we could have a router thread whose state is the list of subdirectories...?
+--   - need to figure out how to pass messages between threads now.....
+--   - if threads are dumb then all we need is the thread's chan to send
+--     a state-modifying message...
+
+-- ... garbage collect empty chatrooms - maybe have the threads be a looping
+-- monad, with a "continuation" function in the state - a recursive
+-- continuation or something?  ...?
+
+-- data Thread = wrapper around Output?  with an open/closed state?
+--   but that's weird...  maybe just code the threads to stop looping
+--   when the Output end is closed?  The readInput should throw an
+--   exception that we can catch and end the loop... just be polite
+--   about it.
+
+-- not StateT s IO but rather a wrapper around StateT (Input *self,s)...
+
+data Thread s a = Thread { runThread :: s -> IO (s,a) }
+
+startThread :: s -> IO (Output (Thread s ()))
+startThread s0 = do (i,o) <- pipe
+                    forkIO $ try' $ forever $ do
+                      f <- readInput i
+                      (s',_) <- runThread f s
+                      -- loop
+-- see what we need from AgentThread here...
+-- try' should break out when the chan is closed - if not, then use a
+-- chan of (Maybe (Thread s ())) instead...?
+
+stopThread :: Output (StateT s IO ()) -> IO ()
+  -- once a thread is killed, no way to recycle the Output chan - just
+  -- make sure nobody else has a copy of it and throw it away to get GC'ed.
+
+
+
+data Param = StringLit String | ObjectLit String
+     -- StringLit is sanitized, but ObjectLit must NOT be tainted!
+
+data JSMessage = JSMessage { recipient :: [String], params :: [Param] }
+-- sendMessage (JSMessage r p) = parent#sendMessage (name:r) p
+
+chatServer :: AgentServer Chat Response
+chatServer = do ps <- getPath
+                case ps of
+                  ["register"] -> do handle . Join =<< getAgent
+                                     success
+                  ["unregister"] -> do handle . Leave =<< getAgent
+                                       success
+                  ["say"] | Just msg <- getQuery "q" -> do
+                                          handle . (Say `flip` msg) =<< getAgent
+                                          success
+                          | otherwise -> failure
+                                       
+
+registrationServer :: (t -> AgentThread s ()) -> AgentServer t Response
+                   -> s -- ^ initial state
+                   -> RegistrationServer
+registrationServer thr srv s0 =
+        RegistrationServer $ \op -> do
+            (i,o) <- pipe
+            let thr' as s = do t <- readInput i
+                               (as',s',_) <- runAgentThread
+                               (thr i) op (as,s)
+            thr' as' s'
+            forkIO $ thr' [] s0
+            return $ srv' o
+    where srv' o agent path query =
+              let failR = fromMaybe blank200 $
+                          jsResponse `fmap` lookup "f" query
+                  succR = fromMaybe blank200 $
+                          jsResponse `fmap` lookup "s" query
+                  regOb = lookup "q" query
+              in case path of
+                   ["register"] -> case regOb of
+                                     Just ob -> do writeOutput o (Reg a ob)
+                                                   runAgentServer srv o
+                                                      agent path query
+                                     Nothing -> failR -- do nothing...
+                   ["unregister"] -> do writeOutput o (UnReg a)
+                                        runAgentServer srv o agent path query
+                   _ -> runAgentServer srv o agent path query
+
+-- newtype ThreadedServer a = ThreadedServer { serverThread :: IO a }
+-- -- ^serverThread forks a thread and returns a server function
+
+runLoginServer :: Int -- ^port
+               -> (Request -> IO Response) -- ^file server
+               -> RegistrationServer       -- ^the interesting stuff
+               -> Request -> IO Response
+
+
+dirServer :: [(Maybe String,        -- "directory name"
+               RegistrationServer)] -- what to do
+             -> RegistrationServer
+dirServer xs = RegistrationServer $ \o -> do
+                 spec <- forM xs $
+                         \(dir,RegistrationServer f) -> (,) dir `fmap` f o
+                 let srv a [] q = case lookup Nothing spec of
+                                    Nothing -> error404
+                                    Just srv -> srv a [] q
+                     srv a (p:ps) q = case lookup (Just p) spec of
+                                        Nothing -> error404
+                                        Just srv -> srv a ps q
+                 return srv
+
+
+
+
+chanServer :: (Input t -> IO ())   -- ^the thread
+           -> (Output t -> Handle -> Request -> IO ())  -- ^the server
+           -> ThreadedServer (Handle -> Request -> IO ())
+chanServer thr srv = ThreadedServer $ do
+                       (i,o) <- pipe
+                       thr i
+                       return $ srv o
+
+newtype RegThread s a = RegThread
+    { unRegThread :: ([(Agent,String)],s) -> IO ([(Agent,String)],s,a) }
+instance Monad (RegThread s) where
+    return a = RegThread $ \(as,s) -> return (as,s,a)
+    (RegThread a) >>= f = RegThread $ \(as,s) ->
+                          do (as',s',a') <- a (as,s)
+                             let RegThread f' = f a'
+                             f' (as',s')
+instance MonadState s (RegThread s) where
+    return a = 
+
+
+regServer :: StateT IO s () -> 
+
+chatServer :: ThreadedServer ((Agent -> [String] -> IO ())
+                              -> Agent -> [String] -> [(String,String)]
+                              -> IO Response)
+chatServer = chanServer (\i -> forkIO $ thr i []) srv
+    where thr :: Input Chat -> [Agent] -> IO ()
+          thr inp ag = do x <- readInput inp
+                          case x of
+                            Join a -> 
+
+loginServer :: (Request -> IO Response) -- ^the underlying fileserver
+            -> ThreadedServer ((Agent -> [String] -> IO ())
+                               -> Agent -> [String] -> [(String,String)]
+                               -> IO Response)  -- ^what to do w/ logins
+            -> ThreadedServer (Handle -> Request -> IO ())
+loginServer  = chanServer (\i -> forkIO $ thr i []) srv
+    where thr :: Input LoginMessage
+              -> [(Agent,(Hostname,Input String,Output String))]
+              -> IO ()
+          thr inp ag = do 
+
+startThreadedServer :: Int
+                    -> ThreadedServer (Handle -> Request -> IO ())
+                    -> IO ()
+startThreadedServer p s = do
+  s <- serverThread s
+  
+
+
+loginServer :: ThreadedServer 
+
+     
+agentServer :: 
+
+-- The javascript client can tell US how it wants us to respond, i.e.
+-- where to store the answer...
+chatServer :: Output Chat
+           -> Agent -> [String] -> [(String,String)] -> IO Response
+chatServer o a ps q = do putStrLn $ "chatServer <o> "++show a++" "++show ps++" "
+                                  ++show q
+                         chatServer' o a ps q
+
+chatServer' :: Output Chat
+           -> Agent -> [String] -> [(String,String)] -> IO Response
+chatServer' outp a ["join"] q = do writeOutput outp $ Join a f
+                                   writeOutput outp $ Say ("Welcome "++show a)
+                                   blank200
+    where f s = jsPrintf (fromMaybe "$.chat.say(%s+\"\\n\")" $ lookup "q" q) [s]
+chatServer' outp a ["leave"] _ = do writeOutput outp $ Leave a
+                                    writeOutput outp $ Say ("Goodbye "++show a)
+                                    blank200
+chatServer' outp a ["say"] q = do let msg = fromMaybe "(noinput)" $ lookup "q" q
+                                  writeOutput outp $ Say (show a++": "++msg)
+                                  blank200
+chatServer' _ _ _ _ = putStrLn "chatServer _ _ _ _" >> error404
+
+chatThread :: Input Chat -> Output LoginMessage
+           -> [(Agent,String -> String)] -> IO ()
+chatThread inp outp ags = do msg <- readInput inp
+                             case msg of
+                               Join a f -> chatThread inp outp $ replace a f ags
+                               Leave a  -> chatThread inp outp $ remove a ags
+                               Say s -> do putStrLn $"Say "++show s
+                                           forM_ ags $ \(a,f) ->
+                                               writeOutput outp $
+                                               SendMessage a $ f s
+                                           chatThread inp outp ags
+    where replace a f [] = [(a,f)]
+          replace a f ((a',f'):as) | a==a'     = (a,f):as
+                                   | otherwise = (a',f'):replace a f as
+          remove _ [] = []
+          remove a ((a',f'):as) | a==a'     = as
+                                | otherwise = (a',f'):remove a as
