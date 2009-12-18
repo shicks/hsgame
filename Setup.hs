@@ -8,7 +8,5 @@ main = build [] $ do -- autoVersion Numbered
                                   requireModule "Data.List"
                      ghcFlags ["-threaded", "-Wall", "-Werror",
                                "-funbox-strict-fields","-O2"]
-                     executable "named-chat" "named-chat.hs" []
                      executable "testdom" "testdom.hs" []
-                     executable "lobby-chat" "lobby-chat.hs" []
                      executable "httpd" "httpd.hs" []
