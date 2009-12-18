@@ -15,7 +15,7 @@ import HTTP.Handlers ( Handler(..), Message(..) )
 import Data.Maybe ( fromMaybe )
 import Control.Monad ( forever )
 import Control.Concurrent ( forkIO )
-import Control.Concurrent.MVar ( MVar, newEmptyMVar, putMVar, takeMVar )
+import Control.Concurrent.MVar ( MVar, newEmptyMVar, putMVar, tryTakeMVar )
 
 data MessageToGame = StartGame
                    | NewPlayer Agent (Output MessageToClient)
@@ -24,7 +24,7 @@ data MessageToGame = StartGame
 -- where to store the answer...
 dominionHandler :: String -> (Agent -> String -> IO ()) -> IO Handler
 dominionHandler area0 sendmess =
-    do (i,o) <- pipe -- ResponseFromClient
+    do (_,ignore_this_o) <- pipe -- ResponseFromClient
        latestq <- newEmptyMVar
        let handle a ps q =
                Message $ \st ->
@@ -32,15 +32,16 @@ dominionHandler area0 sendmess =
                                show ps++" " ++show q
                       handler sendmess st a ps q
            startg ds = do decks <- pickDecks []
+                          (ii,oo) <- pipe -- ResponseFromClient
                           cls <- mapM (manageClient sendmess ds) (clients ds)
-                          bts <- mapM newbot (bots ds)
-                          state <- Dominion.start (cls++bts) i decks
+                          bts <- mapM (newbot oo) (bots ds)
+                          state <- Dominion.start (cls++bts) ii decks
                           forkIO (evalGame play state >>= print)
-                          return ()
-           newbot bname = do (ib,ob) <- pipe
-                             forkIO $ strategyBot bname ib o
-                             return (bname, ob)
-           initstate = DomState area0 [] [] o latestq startg
+                          return (ds { game = oo })
+           newbot o bname = do (ib,ob) <- pipe
+                               forkIO $ strategyBot bname ib o
+                               return (bname, ob)
+           initstate = DomState area0 [] [] ignore_this_o latestq startg
        return $ Handler initstate handle
 
 manageClient :: (Agent -> String -> IO ()) -> DomState -> Agent
@@ -63,7 +64,7 @@ data DomState = DomState { area :: String,
                            bots :: [String],
                            game :: Output ResponseFromClient,
                            latestQ :: MVar (QId, [Answer], (Int,Int)),
-                           start :: DomState -> IO () }
+                           start :: DomState -> IO DomState }
 
 handler :: (Agent -> String -> IO ())
         -> DomState
@@ -74,9 +75,9 @@ handler sendmess ds _ ["start"] _ =
        say sendmess ds "Game is starting!"
        say sendmess ds ("Players: "++unwords (map show $ clients ds))
        say sendmess ds ("Bots: "++unwords (map show $ bots ds))
-       start ds ds
+       ds' <- start ds ds
        r <- blank200
-       return (ds, r)
+       return (ds', r)
 handler sendmess ds a ["join"] _ =
     do let ds' = ds { clients = a : filter (/= a) (clients ds) }
        say sendmess ds' ("Welcome "++show a)
@@ -110,19 +111,23 @@ handler sendmess ds _ ["addbot"] _ =
        return (ds { bots = n : bots ds}, r)
 handler sendmess ds a ["answer"] q =
  do putStrLn "checking on the question... (should be maybe version)"
-    (qid, as, (mn,mx)) <- takeMVar $ latestQ ds
-    case lookup "q" q of
-      Just ns ->
-          do let toa x = case reads x of
-                           [(num,"")] | num < 1 -> []
-                                      | num > length as -> []
-                                      | otherwise -> [as !! (num-1)]
-                           _ -> []
-                 myas = concatMap toa $ words ns
-             if length myas > mx || length myas < mn
-                then sayto sendmess ds a "Bad answer!"
-                else writeOutput (game ds) $ ResponseFromClient qid myas
-      _ -> putStrLn "This doesn't seem quite right..."
+    mq <- tryTakeMVar $ latestQ ds
+    case mq of
+      Just (qid, as, (mn,mx)) ->
+          do putStrLn "got the question..."
+             case lookup "q" q of
+               Just ns ->
+                   do let toa x = case reads x of
+                                    [(num,"")] | num < 1 -> []
+                                               | num > length as -> []
+                                               | otherwise -> [as !! (num-1)]
+                                    _ -> []
+                          myas = concatMap toa $ words ns
+                      if length myas > mx || length myas < mn
+                        then sayto sendmess ds a "Bad answer!"
+                        else writeOutput (game ds) $ ResponseFromClient qid myas
+               _ -> putStrLn "This doesn't seem quite right..."
+      Nothing -> putStrLn "There is no question!!!"
     r <- blank200
     return (ds, r)
 handler _ ags _ _ _ =
