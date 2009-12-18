@@ -3,8 +3,8 @@
 module HTTP.Dominion ( dominionHandler, MessageToGame(..) ) where
 
 import Dominion ( MessageToClient(Question, Info), QId, Answer,
-                  ResponseFromClient(ResponseFromClient),
-                  play, evalGame, pretty, pickDecks )
+                  ResponseFromClient(ResponseFromClient), shuffleIO,
+                  play, evalGame, pretty, pickDecks, strategyBot )
 import qualified Dominion ( start )
 import TCP.Chan ( Output, pipe, readInput, writeOutput )
 
@@ -33,10 +33,14 @@ dominionHandler area0 sendmess =
                       handler sendmess st a ps q
            startg ds = do decks <- pickDecks []
                           cls <- mapM (manageClient sendmess ds) (clients ds)
-                          state <- Dominion.start cls i decks
+                          bts <- mapM newbot (bots ds)
+                          state <- Dominion.start (cls++bts) i decks
                           forkIO (evalGame play state >>= print)
                           return ()
-           initstate = DomState area0 [] o latestq startg
+           newbot bname = do (ib,ob) <- pipe
+                             forkIO $ strategyBot bname ib o
+                             return (bname, ob)
+           initstate = DomState area0 [] [] o latestq startg
        return $ Handler initstate handle
 
 manageClient :: (Agent -> String -> IO ()) -> DomState -> Agent
@@ -56,6 +60,7 @@ manageClient sendmess ds a =
 
 data DomState = DomState { area :: String,
                            clients :: [Agent],
+                           bots :: [String],
                            game :: Output ResponseFromClient,
                            latestQ :: MVar (QId, [Answer], (Int,Int)),
                            start :: DomState -> IO () }
@@ -68,6 +73,7 @@ handler sendmess ds _ ["start"] _ =
     do putStrLn "game should start now..."
        say sendmess ds "Game is starting!"
        say sendmess ds ("Players: "++unwords (map show $ clients ds))
+       say sendmess ds ("Bots: "++unwords (map show $ bots ds))
        start ds ds
        r <- blank200
        return (ds, r)
@@ -87,10 +93,21 @@ handler sendmess ags a ["say"] q =
        say sendmess ags (show a++": "++msg)
        r <- blank200
        return (ags, r)
-handler sendmess ags _ ["addbot"] _ =
-    do say sendmess ags "I ought to be adding a bot..."
-       r <- blank200
-       return (ags, r)
+handler sendmess ds _ ["addbot"] _ =
+    do r <- blank200
+       let botnames = ["Hadaly", "Olympia", "Tik-Tok", "Zat", "Rex",
+                       "Helen O'Loy", "Adam Link", "Gnut", "Jay Score",
+                       "Robbie", "Speedie", "Cutie", "L-76", "Z-1", "Z-2",
+                       "Z-3", "Emma-2", "Brackenridge", "Tony", "Lenny",
+                       "Ez-27", "R. Daneel Olivaw", "R. Giskard Reventlov",
+                       "Andrew Martin", "Norby", "Bors", "Zane Gort", "SHROUD",
+                       "SHOCK", "Frost", "Trurl", "Klapaucius",
+                       "Marvin the Paranoid Android", "Dorfl", "Muffit II",
+                       "T-800", "ED-209", "Dot Matrix", "T-1000", "T-850",
+                       "Data", "HAL", "R2-D2", "C-3PO"]
+       n <- (head . filter (`notElem` bots ds)) `fmap` shuffleIO botnames
+       say sendmess ds ("Adding a bot named "++n)
+       return (ds { bots = n : bots ds}, r)
 handler sendmess ds a ["answer"] q =
  do putStrLn "checking on the question... (should be maybe version)"
     (qid, as, (mn,mx)) <- takeMVar $ latestQ ds

@@ -56,15 +56,17 @@
     var input=$("<input type='text' size='60'/>");
     var answer=$("<input type='submit' value='Answer'/>");
     var start=$("<input type='submit' value='Start game!'/>");
+    var addbot=$("<input type='submit' value='Add bot'/>");
     start.bind("click",function(e){sendMessage(room+"/start",{})});
     var ans=function(){sendMessage(room+"/answer",{q:input.val()});
                        input.val("")};
     var say=function(){sendMessage(room+"/say",{q:input.val()});
                        input.val("")};
     answer.bind("click",function(e){ans()});
+    addbot.bind("click",function(e){sendMessage(room+"/addbot",{});});
     input.bind("keypress",function(e){if(e.which==13)ans()});
     with(div){append(txt);append("<br/>");
-              append(input);append(answer);append(start)};
+              append(input);append(answer);append(addbot);append(start)};
     return chatRoom(room,txt);
   }
 
